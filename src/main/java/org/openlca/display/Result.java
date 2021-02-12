@@ -53,14 +53,6 @@ public class Result {
 	@Override
 	public String toString() {
 		return contribution.item.toString();
-//		String s = "{ " + contribution.item.toString() + '\n';
-//		if (startPoint != null) {
-//			s += startPoint.toString() + '\n';
-//		}
-//		if (targetProductResult != null) {
-//			s += targetProductResult.getContribution().item.toString() + " }";
-//		}
-//		return s;
 	}
 
 	@Override
