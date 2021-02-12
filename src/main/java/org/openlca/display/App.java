@@ -13,32 +13,16 @@ import org.eclipse.swt.widgets.Shell;
  *
  */
 public class App {
-	final private static int NB_Product_Results = 100;
-	public static void main(String[] args) {
-		// Create random numbers, in order to be the product results
-		ArrayList<String> results = new ArrayList<>();
-		Random rand = new Random();
-		for (int i = 0; i < NB_Product_Results; i++) {
-			results.add(String.valueOf(rand.nextLong()));
-		}
-		
-		// Creation of product 1, with the random results
-		Product p1 = new Product(results);
-		ArrayList<String> results2 = new ArrayList<>(results);
-		Collections.shuffle(results2);
-		// Creation of product 2, with the previous results, but shuffled
-		Product p2 = new Product(results2);
+	final private static int NB_Product_Results = 10;
 
-		ArrayList<Product> list = new ArrayList<>();
-		list.add(p1);
-		list.add(p2);
+	public static void main(String[] args) {
 
 		Display display = new Display();
 		Shell shell = new Shell(display);
 		shell.setText("Canvas Example");
 		shell.setLayout(new FillLayout());
-		
-		new ProductDisplay(shell, list).display();
+		ArrayList<Product> products = createProducts(3);
+		new ProductDisplay(shell, products).display();
 
 		shell.open();
 		while (!shell.isDisposed()) {
@@ -49,5 +33,20 @@ public class App {
 		display.dispose();
 	}
 
-	
+	private static ArrayList<Product> createProducts(int amount) {
+		// Create random numbers, in order to be the product results
+		ArrayList<String> results = new ArrayList<>();
+		Random rand = new Random();
+		for (int i = 0; i < NB_Product_Results; i++) {
+			results.add(String.valueOf(rand.nextLong()));
+		}
+		ArrayList<Product> products = new ArrayList<>();
+		for (int i = 0; i < amount; i++) {
+			ArrayList<String> results2 = new ArrayList<>(results);
+			Collections.shuffle(results2);
+			Product p1 = new Product(results2);
+			products.add(p1);
+		}
+		return products;
+	}
 }

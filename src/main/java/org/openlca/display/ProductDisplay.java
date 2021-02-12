@@ -35,19 +35,24 @@ public class ProductDisplay {
 				for (int i = 0; i < products.size(); i++) {
 					Product p = products.get(i);
 					// Draw a rectangle for each product
-					e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) width, height,30,30);
+					e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) width, height, 30, 30);
 					Point prevRectEdge = rectEdge;
 					for (int j = 0; j < total; j++) {
 						Result result1 = p.getResult(j);
 						Point sepStart = new Point(rectEdge.x + (j + 1) * (int) gap, rectEdge.y);
 						Point sepEnd = new Point(sepStart.x, rectEdge.y + height);
 						// Draw a separator line between the current result, and the next one
-						e.gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+						if (j != total - 1) {
+							e.gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+						}
+						Point textPos = new Point(prevRectEdge.x+10,(sepEnd.y+sepStart.y)/2-10);
+						e.gc.drawText(result1.toString(), textPos.x,textPos.y);
 						result1.setStartPoint((prevRectEdge.x + sepEnd.x) / 2, sepEnd.y);
 						result1.setEndPoint((prevRectEdge.x + sepEnd.x) / 2, sepStart.y);
 						if (i + 1 < products.size()) {
 							Product p2 = products.get(i + 1);
-							Optional<Result> result2 = p2.getList().stream().filter(r2 -> result1.equals(r2)).findFirst();
+							Optional<Result> result2 = p2.getList().stream().filter(r2 -> result1.equals(r2))
+									.findFirst();
 							if (result2.isPresent()) {
 								result1.setTargetProductResult(result2.get());
 							} else {

@@ -33,6 +33,7 @@ public class Product {
 		return list.get(index);
 	}
 
+	@Override
 	public String toString() {
 		String s = "[ ";
 		for (Result r : list) {
