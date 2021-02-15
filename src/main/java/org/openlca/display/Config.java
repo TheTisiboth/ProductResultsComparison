@@ -4,4 +4,5 @@ public class Config {
 
 	public final int NB_Product_Results = 10;
 	public final boolean displayResultValue = true;
+	public final boolean useFakeResults = true;
 }
