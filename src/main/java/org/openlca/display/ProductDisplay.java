@@ -24,116 +24,171 @@ public class ProductDisplay {
 	private Point screenSize;
 	private Config config;
 	final Point origin;
+	final int maxProductResultsAmout;
+	final int xMargin;
+	final int productHeight;
+	final int gapBetweenProduct;
+	final int theoreticalScreenHeight;
 
 	public ProductDisplay(Shell shell, final ArrayList<Product> products, Config config) {
 		this.shell = shell;
 		this.products = products;
-		screenSize = shell.getSize();
 		this.config = config;
+		screenSize = shell.getSize();
 		origin = new Point(0, 0);
+		maxProductResultsAmout = products.stream().mapToInt(p -> p.getList().size()).max().getAsInt();
+		xMargin = 100;
+		productHeight = 30;
+		gapBetweenProduct = 300;
+		theoreticalScreenHeight = xMargin + (productHeight + gapBetweenProduct) * (products.size() - 1);
 	}
 
 	/**
 	 * Display the products, and draw links between each matching results
 	 */
 	void display() {
+		/**
+		 * Composite component
+		 */
 		Composite composite = new Composite(shell, SWT.NONE);
 		composite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		composite.setLayout(new GridLayout(1, false));
 
+		/**
+		 * Canvas component
+		 */
 		Canvas canvas = new Canvas(composite, SWT.V_SCROLL);
 		canvas.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-		System.out.println(3);
-		final int maxProductResultsAmout = products.stream().mapToInt(p -> p.getList().size()).max().getAsInt();
-		final ScrollBar vBar = canvas.getVerticalBar();
-		
-		int theoreticalScreenHeight = 100+330*(products.size()-1);
+
+		/**
+		 * VBar component
+		 */
+		ScrollBar vBar = canvas.getVerticalBar();
 		vBar.setMaximum(theoreticalScreenHeight);
 		vBar.setMinimum(0);
-		vBar.addListener(SWT.Selection, new Listener() {
+		
+		addScrollListener(canvas, vBar);
+		addResizeEvent(composite, canvas, vBar);
+		addPaintListener(composite, canvas);
+//		canvas.redraw();
+	}
 
+	/**
+	 * Add a scroll listener to the canvas
+	 * 
+	 * @param canvas The canvas component
+	 * @param vBar   The scrolling vertical bar
+	 */
+	private void addScrollListener(Canvas canvas, ScrollBar vBar) {
+		vBar.addListener(SWT.Selection, new Listener() {
 			@Override
 			public void handleEvent(Event event) {
 				System.out.println("Scroll event");
 				int vSelection = vBar.getSelection();
 				int destY = -vSelection - origin.y;
-				canvas.scroll(0, destY, 0, 0, canvas.getSize().x, canvas.getSize().y, true);
+				canvas.scroll(0, destY, 0, 0, canvas.getSize().x, canvas.getSize().y, false);
 				origin.y = -vSelection;
-//                canvas.redraw(0, origin.y,2120, 2000, false);
 			}
-
 		});
+	}
+
+	/**
+	 * Add a resize listener to the canvas
+	 * 
+	 * @param composite Parent composent of the canvas
+	 * @param canvas    The Canvas component
+	 * @param vBar      The scrolling vertical bar
+	 */
+	private void addResizeEvent(Composite composite, Canvas canvas, ScrollBar vBar) {
 		canvas.addListener(SWT.Resize, new Listener() {
 			@Override
 			public void handleEvent(Event e) {
 				System.out.println("Resize event");
-
 				Rectangle client = canvas.getClientArea();
-//				vBar.setMaximum(2000);
-
-				vBar.setThumb(Math.min(composite.getSize().y, client.height));
-				vBar.setPageIncrement(Math.min(composite.getSize().y, client.height));
-
+				vBar.setThumb(Math.min(theoreticalScreenHeight, client.height));
+				vBar.setPageIncrement(Math.min(theoreticalScreenHeight, client.height));
 				vBar.setIncrement(20);
-				int vPage = composite.getSize().y - client.height;
+				int vPage = canvas.getSize().y - client.height;
 				int vSelection = vBar.getSelection();
-
 				if (vSelection >= vPage) {
 					if (vPage <= 0)
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				System.out.println( "origin.x " + origin.x + " origin.y " + origin.y);
-//				canvas.redraw(0, origin.y, 2120, 2000, false);
 			}
 		});
+	}
+
+	/**
+	 * Add a paint listener to the canvas
+	 * 
+	 * @param composite Parent composent of the canvas
+	 * @param canvas    A Canvas component
+	 */
+	private void addPaintListener(Composite composite, Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
 				System.out.println("Paint event");
 				screenSize = composite.getSize(); // Responsive behavior
-				System.out.println(screenSize);
-				Point rectEdge = new Point(origin.x + 100, origin.y + 100); // Start point of the first product
-																			// rectangle
-				double width = screenSize.x * 0.8;
-				int height = 30;
+				double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
+				Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin); // Start point of the first product
+				// rectangle
 				for (int productIndex = 0; productIndex < products.size(); productIndex++) {
 					Product p = products.get(productIndex);
-					final int productResultsAmount = products.get(0).getList().size();
-					width = (productResultsAmount / maxProductResultsAmout) * width;
-					double gap = width / productResultsAmount;
+					final int productResultsAmount = p.getList().size();
+					int productWidth = (int) ((productResultsAmount / maxProductResultsAmout) * maxProductWidth);
+					int gap = (int) (productWidth / productResultsAmount);
 
 					// Draw a rectangle for each product
-					e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) width, height, 30, 30);
+					e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight, 30, 30);
 					Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
 					for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
 						Result result1 = p.getResult(resultIndex);
-						Point sepStart = new Point(rectEdge.x + (resultIndex + 1) * (int) gap, rectEdge.y);
-						Point sepEnd = new Point(sepStart.x, rectEdge.y + height);
-						// Draw a separator line between the current result, and the next one
-						if (resultIndex != productResultsAmount - 1) {
-							e.gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
-						}
-						if (config.displayResultValue) {
-							Point textPos = new Point(prevSubRectEdge.x + 10, (sepEnd.y + sepStart.y) / 2 - 10);
-							e.gc.drawText(result1.toString(), textPos.x, textPos.y);
-						}
-						result1.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
-						result1.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
-						if (productIndex + 1 < products.size()) { // If there is a next product
-							Product p2 = products.get(productIndex + 1);
-							Optional<Result> result2 = p2.getList().stream().filter(r2 -> result1.equals(r2))
-									.findFirst();// We search for the first match result
-							if (result2.isPresent()) {
-								result1.setTargetProductResult(result2.get());
-							} else {
-								System.out.println("ko");
-							}
-						}
-						prevSubRectEdge = sepStart;
+						prevSubRectEdge = handleResult(e, productIndex, productResultsAmount, prevSubRectEdge,
+								resultIndex, result1, gap, rectEdge);
 					}
 					rectEdge.y += 300;
 				}
 				drawLinks(e);
+			}
+
+			/**
+			 * Handle the current result. Draw a separation line between it and the next
+			 * result, display its value, and find a matching result in the next product
+			 * 
+			 * @param e                    The Paint Event
+			 * @param productIndex         Index of the current product
+			 * @param productResultsAmount Amount of results for the current product
+			 * @param prevSubRectEdge      Separation with the previous result
+			 * @param resultIndex          The index result
+			 * @param result               THe current result
+			 * @param gap                  Gap between 2 products
+			 * @param rectEdge             Position of product rectangle
+			 * @return
+			 */
+			private Point handleResult(PaintEvent e, int productIndex, final int productResultsAmount,
+					Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge) {
+				// Draw a separator line between the current result, and the next one
+				Point sepStart = new Point(rectEdge.x + (resultIndex + 1) * (int) gap, rectEdge.y);
+				Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
+				if (resultIndex != productResultsAmount - 1) {
+					e.gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+				}
+				if (config.displayResultValue) {
+					Point textPos = new Point(prevSubRectEdge.x + 10, (sepEnd.y + sepStart.y) / 2 - 10);
+					e.gc.drawText(result.toString(), textPos.x, textPos.y);
+				}
+				result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
+				result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
+				if (productIndex + 1 < products.size()) { // If there is a next product
+					Product p2 = products.get(productIndex + 1);
+					// We searh the first matching result
+					Optional<Result> result2 = p2.getList().stream().filter(r2 -> result.equals(r2)).findFirst();
+					if (result2.isPresent()) {
+						result.setTargetProductResult(result2.get());
+					}
+				}
+				return sepStart;
 			}
 
 			/**
@@ -149,21 +204,17 @@ public class ProductDisplay {
 						if (result2 != null) {
 							Point p2 = result2.getEndPoint();
 							drawBezierCurve(e, p1, p2);
-							new Path(null);
 						}
 					}
 				}
 			}
 		});
-
-		canvas.redraw();
-		System.out.println();
 	}
 
 	/**
 	 * Draw a bezier curve, between 2 points
 	 * 
-	 * @param e
+	 * @param e     The Paint Event
 	 * @param start The starting point
 	 * @param end   The ending point
 	 */
