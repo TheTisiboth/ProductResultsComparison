@@ -1,5 +1,6 @@
 package org.openlca.display;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -8,16 +9,38 @@ import java.util.Random;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
+import org.openlca.core.database.IDatabase;
+import org.openlca.core.database.derby.DerbyDatabase;
+import org.openlca.core.math.CalculationSetup;
+import org.openlca.core.math.SystemCalculator;
+import org.openlca.core.model.FlowType;
+import org.openlca.core.model.Process;
+import org.openlca.core.model.ProductSystem;
+import org.openlca.julia.Julia;
+import org.openlca.julia.JuliaSolver;
+
+import com.greendelta.cli.Arguments;
 
 public class App {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws Exception {
+		boolean loaded = Julia.load();
+		Input input = Arguments.parse(Input.class, args);
+		System.out.println("Connect to databases ");
+		File tempDir = new File(System.getProperty("java.io.tmpdir"));
+		loaded = Julia.loadFromDir(tempDir);
+		IDatabase db = new DerbyDatabase(Data.getDbDir(input.dbFile));
+		var calc = new SystemCalculator(db, new JuliaSolver());
+		var system = loadSystem(db);
+		var results = calc.calculateContributions(new CalculationSetup(system));
+
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
 		Shell shell = new Shell(display);
 		shell.setText("Canvas Example");
 		shell.setLayout(new FillLayout());
-		ArrayList<Product> products = createProducts(3, config);
+
+		ArrayList<Product> products = createProducts(10, config);
 		new ProductDisplay(shell, products, config).display();
 
 		shell.open();
@@ -27,6 +50,35 @@ public class App {
 			}
 		}
 		display.dispose();
+	}
+
+	private static ProductSystem loadSystem(IDatabase db) {
+		System.out.println("Load system");
+		ProductSystem system = null;
+		for (var d : db.allDescriptorsOf(Process.class)) {
+			var process = db.get(Process.class, d.id);
+			if (!hasValidQRef(process)) {
+				continue;
+			}
+			system = ProductSystem.of(process);
+			system.withoutNetwork = true;
+			break;
+		}
+		if (system == null) {
+			System.out.println("the database has no valid processes");
+//			error.accept("the database has no valid processes");
+		}
+		return system;
+	}
+
+	private static boolean hasValidQRef(Process p) {
+		if (p == null || p.quantitativeReference == null)
+			return false;
+		var qref = p.quantitativeReference;
+		if (qref.amount == 0 || qref.flow == null || qref.isAvoided)
+			return false;
+		var type = qref.flow.flowType;
+		return (type == FlowType.WASTE_FLOW && qref.isInput) || (type == FlowType.PRODUCT_FLOW && !qref.isInput);
 	}
 
 	private static ArrayList<Product> createProducts(int productsAmount, Config config) {

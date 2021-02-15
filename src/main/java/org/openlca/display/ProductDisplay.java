@@ -9,6 +9,7 @@ import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.graphics.Path;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Shell;
 
 public class ProductDisplay {
@@ -28,11 +29,15 @@ public class ProductDisplay {
 	 * Display the products, and draw links between each matching results
 	 */
 	void display() {
-		Canvas canvas = new Canvas(shell, SWT.NONE);
+		System.out.println(1);
+		Canvas canvas = new Canvas(shell, SWT.V_SCROLL);
+		System.out.println(3);
 		final int total = products.get(0).getList().size();
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
+				System.out.println(2);
 				screenSize = shell.getSize(); // Responsive behavior
+				System.out.println(screenSize);
 				Point rectEdge = new Point(100, 100); // Start point of the first product rectangle
 				double width = screenSize.x * 0.8;
 				int height = 30;
