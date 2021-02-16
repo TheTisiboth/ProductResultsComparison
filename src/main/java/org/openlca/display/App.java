@@ -72,7 +72,7 @@ public class App {
 					}
 				}
 				var cs = result.getProcessContributions(impact);
-				var p = new Product<CategorizedDescriptor>(cs);
+				var p = new Product<CategorizedDescriptor>(cs, dbName);
 				list.add(p);
 			}
 		}
@@ -96,7 +96,7 @@ public class App {
 				c.item = string;
 				l.add(c);
 			}
-			var p1 = new Product<String>(l);
+			var p1 = new Product<String>(l, "Product "+i);
 			products.add(p1);
 		}
 		return products;

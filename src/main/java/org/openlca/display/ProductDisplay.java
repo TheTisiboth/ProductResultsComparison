@@ -46,7 +46,7 @@ public class ProductDisplay<CategorizedDescriptor> {
 	 * Display the products, and draw links between each matching results
 	 */
 	void display() {
-		System.out.println("Start");
+		System.out.println("Display start");
 		/**
 		 * Composite component
 		 */
@@ -83,7 +83,6 @@ public class ProductDisplay<CategorizedDescriptor> {
 		vBar.addListener(SWT.Selection, new Listener() {
 			@Override
 			public void handleEvent(Event event) {
-				System.out.println("Scroll event");
 				int vSelection = vBar.getSelection();
 				int destY = -vSelection - origin.y;
 				canvas.scroll(0, destY, 0, 0, canvas.getSize().x, canvas.getSize().y, false);
@@ -103,7 +102,6 @@ public class ProductDisplay<CategorizedDescriptor> {
 		canvas.addListener(SWT.Resize, new Listener() {
 			@Override
 			public void handleEvent(Event e) {
-				System.out.println("Resize event");
 				Rectangle client = canvas.getClientArea();
 				vBar.setThumb(Math.min(theoreticalScreenHeight, client.height));
 				vBar.setPageIncrement(Math.min(theoreticalScreenHeight, client.height));
@@ -128,7 +126,6 @@ public class ProductDisplay<CategorizedDescriptor> {
 	private void addPaintListener(Composite composite, Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				System.out.println("Paint event");
 				screenSize = composite.getSize(); // Responsive behavior
 				double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 				Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin); // Start point of the first product
@@ -140,39 +137,67 @@ public class ProductDisplay<CategorizedDescriptor> {
 				drawLinks(e);
 			}
 
+			/**
+			 * Handle the current product. Draw a rectangle, write the product name in it,
+			 * and handle the product results
+			 * 
+			 * @param e               The Paint event
+			 * @param maxProductWidth The maximal width for a product
+			 * @param rectEdge        The coordinate of the product rectangle
+			 * @param productIndex    The index of the current product
+			 */
 			private void handleProduct(PaintEvent e, double maxProductWidth, Point rectEdge, int productIndex) {
 				var p = products.get(productIndex);
 				final int productResultsAmount = p.getList().size();
-				int productWidth = (int) (((double)productResultsAmount / (double)maxProductResultsAmout) * maxProductWidth);
+				int productWidth = (int) (((double) productResultsAmount / (double) maxProductResultsAmout)
+						* maxProductWidth);
 				// It is the gap between two results
 				double gap = ((double) productWidth / productResultsAmount);
-				int chunk = -1;
-				double chunkSize = 0;
+				int chunk = -1, chunkSize = 0;
 				boolean drawSeparation = true;
 				if (gap < 1.0) {
-					// If the gap is to small, we put a certain amount of of results in the same
+					// If the gap is to small, we put a certain amount of results in the same
 					// chunk
-					chunkSize = 1 / gap;
+					chunkSize = (int) Math.ceil(1 / gap);
 					drawSeparation = false;
 				}
 				// Draw a rectangle for each product
 				e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight, 30, 30);
+				// Draw the product name
+				Point textPos = new Point(rectEdge.x + 11, rectEdge.y + 8);
+				e.gc.drawText(p.getName(), textPos.x, textPos.y);
 				Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
 				for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
-					if (!drawSeparation) {
-						// Every chunkSize, we increment the chunk
-						var newChunk = (resultIndex % (int) chunkSize) == 0;
-						if (newChunk == true) {
-							chunk++;
-						}
-					} else {
-						chunk = (int) gap * resultIndex + 1;
-					}
-					System.out.println(chunk);
+					chunk = computeChunk(gap, chunk, chunkSize, drawSeparation, resultIndex);
 					var result1 = p.getResult(resultIndex);
-					prevSubRectEdge = handleResult(e, productIndex, productResultsAmount, prevSubRectEdge,
-							resultIndex, result1, chunk, rectEdge, drawSeparation);
+					prevSubRectEdge = handleResult(e, productIndex, productResultsAmount, prevSubRectEdge, resultIndex,
+							result1, chunk, rectEdge, drawSeparation);
 				}
+			}
+
+			/**
+			 * Compute the new chunk value, which will indicate the position of the current
+			 * result
+			 * 
+			 * @param gap            The gap between 2 results
+			 * @param chunk          The value of the current chunk
+			 * @param chunkSize      The size of the chunks
+			 * @param drawSeparation Indicate if we have to draw a separation line between
+			 *                       the results
+			 * @param resultIndex    The index result
+			 * @return The new chunk value
+			 */
+			private int computeChunk(double gap, int chunk, int chunkSize, boolean drawSeparation, int resultIndex) {
+				if (!drawSeparation) {
+					// Every chunkSize, we increment the chunk
+					var newChunk = (resultIndex % (int) chunkSize) == 0;
+					if (newChunk == true) {
+						chunk++;
+					}
+				} else {
+					chunk = (int) gap * resultIndex + 1;
+				}
+				return chunk;
 			}
 
 			/**
@@ -207,7 +232,7 @@ public class ProductDisplay<CategorizedDescriptor> {
 				result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
 				if (productIndex + 1 < products.size()) { // If there is a next product
 					var p2 = products.get(productIndex + 1);
-					// We searh the first matching result
+					// We search the first matching result
 					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2)).findFirst();
 					if (result2.isPresent()) {
 						result.setTargetProductResult(result2.get());

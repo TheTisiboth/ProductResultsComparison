@@ -62,6 +62,7 @@ public class Result<T> {
 		if (!(o instanceof Result)) {
 			return false;
 		}
+		@SuppressWarnings("unchecked")
 		Result<T> r = (Result<T>) o;
 		return contribution.item.equals(r.contribution.item);
 	}

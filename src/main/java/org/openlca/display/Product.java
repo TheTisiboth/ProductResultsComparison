@@ -8,16 +8,22 @@ import org.openlca.core.results.Contribution;
 public class Product<T> {
 
 	private ArrayList<Result<T>> list;
+	private String name;
 
 	public Product() {
 		list = new ArrayList<>();
 	}
 
-	public Product(List<Contribution<T>> l) {
+	public Product(List<Contribution<T>> l, String n) {
+		name = n;
 		list = new ArrayList<>();
 		for (Contribution<T> c : l) {
-			list.add( new Result<T>(c));
+			list.add(new Result<T>(c));
 		}
+	}
+
+	public String getName() {
+		return name;
 	}
 
 	public ArrayList<Result<T>> getList() {
