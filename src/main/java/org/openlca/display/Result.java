@@ -1,35 +1,37 @@
 package org.openlca.display;
 
 import org.eclipse.swt.graphics.Point;
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
+import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 
-public class Result<T> {
+public class Result {
 
-	private Contribution<T> contribution;
+	private Contribution<CategorizedDescriptor> contribution;
 	private Point startPoint; // Point from which a links start
 	private Point endPoint; // Point to which the links ends
-	private Result<T> targetProductResult;
+	private Result targetProductResult;
 
-	public Result(Contribution<T> item) {
+	public Result(Contribution<CategorizedDescriptor> item) {
 		contribution = item;
 		startPoint = null;
 		endPoint = null;
 		targetProductResult = null;
 	}
 
-	public Contribution<T> getContribution() {
+	public Contribution<CategorizedDescriptor> getContribution() {
 		return contribution;
 	}
 
-	public void setContribution(Contribution<T> contribution) {
+	public void setContribution(Contribution<CategorizedDescriptor> contribution) {
 		this.contribution = contribution;
 	}
 
-	public Result<T> getTargetProductResult() {
+	public Result getTargetProductResult() {
 		return targetProductResult;
 	}
 
-	public void setTargetProductResult(Result<T> targetProductResult) {
+	public void setTargetProductResult(Result targetProductResult) {
 		this.targetProductResult = targetProductResult;
 	}
 
@@ -54,16 +56,34 @@ public class Result<T> {
 		return contribution.item.toString();
 	}
 
-	@Override
-	public boolean equals(Object o) {
+	public boolean equals(Object o, ComparisonCriteria criteria) {
 		if (o == this) {
 			return true;
 		}
 		if (!(o instanceof Result)) {
 			return false;
 		}
-		@SuppressWarnings("unchecked")
-		Result<T> r = (Result<T>) o;
-		return contribution.item.equals(r.contribution.item);
+		Result r = (Result) o;
+		boolean comparison;
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				comparison = contribution.amount == r.contribution.amount;
+				break;
+			case CATEGORY:
+				comparison = ((CategorizedDescriptor) r.contribution.item).category
+						.equals(((CategorizedDescriptor) contribution.item).category);
+				break;
+			case LOCATION:
+				comparison = ((ProcessDescriptor) r.contribution.item).location
+						.equals(((ProcessDescriptor) contribution.item).location);
+				break;
+			default:
+				throw new IllegalArgumentException("Unexpected value: " + criteria);
+			}
+			return comparison;
+		} catch (Exception e) {
+			return contribution.item.equals(r.contribution.item);
+		}
 	}
 }

@@ -17,9 +17,9 @@ import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 
-public class ProductDisplay<CategorizedDescriptor> {
+public class ProductDisplay {
 	private Shell shell;
-	private List<Product<CategorizedDescriptor>> products;
+	private List<Product> products;
 	private Point screenSize;
 	private Config config;
 	final Point origin;
@@ -29,7 +29,7 @@ public class ProductDisplay<CategorizedDescriptor> {
 	final int gapBetweenProduct;
 	final int theoreticalScreenHeight;
 
-	public ProductDisplay(Shell shell, final List<Product<CategorizedDescriptor>> products, Config config) {
+	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
 		this.products = products;
 		this.config = config;
@@ -216,7 +216,7 @@ public class ProductDisplay<CategorizedDescriptor> {
 			 * @return
 			 */
 			private Point handleResult(PaintEvent e, int productIndex, final int productResultsAmount,
-					Point prevSubRectEdge, int resultIndex, Result<CategorizedDescriptor> result, int gap,
+					Point prevSubRectEdge, int resultIndex, Result result, int gap,
 					Point rectEdge, boolean drawSeparation) {
 				// Draw a separator line between the current result, and the next one
 				Point sepStart = new Point(rectEdge.x + gap, rectEdge.y);
@@ -233,7 +233,7 @@ public class ProductDisplay<CategorizedDescriptor> {
 				if (productIndex + 1 < products.size()) { // If there is a next product
 					var p2 = products.get(productIndex + 1);
 					// We search the first matching result
-					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2)).findFirst();
+					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2,config.comparisonCriteria)).findFirst();
 					if (result2.isPresent()) {
 						result.setTargetProductResult(result2.get());
 					}

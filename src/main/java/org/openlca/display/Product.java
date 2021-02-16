@@ -3,22 +3,23 @@ package org.openlca.display;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.results.Contribution;
 
-public class Product<T> {
+public class Product {
 
-	private ArrayList<Result<T>> list;
+	private ArrayList<Result> list;
 	private String name;
 
 	public Product() {
 		list = new ArrayList<>();
 	}
 
-	public Product(List<Contribution<T>> l, String n) {
+	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
 		name = n;
 		list = new ArrayList<>();
-		for (Contribution<T> c : l) {
-			list.add(new Result<T>(c));
+		for (Contribution<CategorizedDescriptor> c : l) {
+			list.add(new Result(c));
 		}
 	}
 
@@ -26,26 +27,26 @@ public class Product<T> {
 		return name;
 	}
 
-	public ArrayList<Result<T>> getList() {
+	public ArrayList<Result> getList() {
 		return list;
 	}
 
-	public void setList(ArrayList<Result<T>> list) {
+	public void setList(ArrayList<Result> list) {
 		this.list = list;
 	}
 
-	public void setResult(int index, Result<T> r) {
+	public void setResult(int index, Result r) {
 		list.set(index, r);
 	}
 
-	public Result<T> getResult(int index) {
+	public Result getResult(int index) {
 		return list.get(index);
 	}
 
 	@Override
 	public String toString() {
 		String s = "[ ";
-		for (Result<T> r : list) {
+		for (Result r : list) {
 			s += r.getContribution().item.toString() + ", ";
 		}
 		s += " ]";
