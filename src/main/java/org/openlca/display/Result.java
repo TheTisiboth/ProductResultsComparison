@@ -3,34 +3,33 @@ package org.openlca.display;
 import org.eclipse.swt.graphics.Point;
 import org.openlca.core.results.Contribution;
 
-public class Result {
+public class Result<T> {
 
-	private Contribution<String> contribution;
+	private Contribution<T> contribution;
 	private Point startPoint; // Point from which a links start
 	private Point endPoint; // Point to which the links ends
-	private Result targetProductResult;
+	private Result<T> targetProductResult;
 
-	public Result(String item) {
-		contribution = new Contribution<>();
-		contribution.item = item;
+	public Result(Contribution<T> item) {
+		contribution = item;
 		startPoint = null;
 		endPoint = null;
 		targetProductResult = null;
 	}
 
-	public Contribution<String> getContribution() {
+	public Contribution<T> getContribution() {
 		return contribution;
 	}
 
-	public void setContribution(Contribution<String> contribution) {
+	public void setContribution(Contribution<T> contribution) {
 		this.contribution = contribution;
 	}
 
-	public Result getTargetProductResult() {
+	public Result<T> getTargetProductResult() {
 		return targetProductResult;
 	}
 
-	public void setTargetProductResult(Result targetProductResult) {
+	public void setTargetProductResult(Result<T> targetProductResult) {
 		this.targetProductResult = targetProductResult;
 	}
 
@@ -63,7 +62,7 @@ public class Result {
 		if (!(o instanceof Result)) {
 			return false;
 		}
-		Result r = (Result) o;
+		Result<T> r = (Result<T>) o;
 		return contribution.item.equals(r.contribution.item);
 	}
 }

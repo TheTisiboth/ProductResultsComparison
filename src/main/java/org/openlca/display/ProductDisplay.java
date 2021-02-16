@@ -1,7 +1,6 @@
 package org.openlca.display;
 
-import java.util.ArrayList;
-import java.util.Optional;
+import java.util.List;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
@@ -18,9 +17,9 @@ import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 
-public class ProductDisplay {
+public class ProductDisplay<CategorizedDescriptor> {
 	private Shell shell;
-	private ArrayList<Product> products;
+	private List<Product<CategorizedDescriptor>> products;
 	private Point screenSize;
 	private Config config;
 	final Point origin;
@@ -30,7 +29,7 @@ public class ProductDisplay {
 	final int gapBetweenProduct;
 	final int theoreticalScreenHeight;
 
-	public ProductDisplay(Shell shell, final ArrayList<Product> products, Config config) {
+	public ProductDisplay(Shell shell, final List<Product<CategorizedDescriptor>> products, Config config) {
 		this.shell = shell;
 		this.products = products;
 		this.config = config;
@@ -47,6 +46,7 @@ public class ProductDisplay {
 	 * Display the products, and draw links between each matching results
 	 */
 	void display() {
+		System.out.println("Start");
 		/**
 		 * Composite component
 		 */
@@ -66,7 +66,7 @@ public class ProductDisplay {
 		ScrollBar vBar = canvas.getVerticalBar();
 		vBar.setMaximum(theoreticalScreenHeight);
 		vBar.setMinimum(0);
-		
+
 		addScrollListener(canvas, vBar);
 		addResizeEvent(composite, canvas, vBar);
 		addPaintListener(composite, canvas);
@@ -134,22 +134,45 @@ public class ProductDisplay {
 				Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin); // Start point of the first product
 				// rectangle
 				for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-					Product p = products.get(productIndex);
-					final int productResultsAmount = p.getList().size();
-					int productWidth = (int) ((productResultsAmount / maxProductResultsAmout) * maxProductWidth);
-					int gap = (int) (productWidth / productResultsAmount);
-
-					// Draw a rectangle for each product
-					e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight, 30, 30);
-					Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
-					for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
-						Result result1 = p.getResult(resultIndex);
-						prevSubRectEdge = handleResult(e, productIndex, productResultsAmount, prevSubRectEdge,
-								resultIndex, result1, gap, rectEdge);
-					}
+					handleProduct(e, maxProductWidth, rectEdge, productIndex);
 					rectEdge.y += 300;
 				}
 				drawLinks(e);
+			}
+
+			private void handleProduct(PaintEvent e, double maxProductWidth, Point rectEdge, int productIndex) {
+				var p = products.get(productIndex);
+				final int productResultsAmount = p.getList().size();
+				int productWidth = (int) (((double)productResultsAmount / (double)maxProductResultsAmout) * maxProductWidth);
+				// It is the gap between two results
+				double gap = ((double) productWidth / productResultsAmount);
+				int chunk = -1;
+				double chunkSize = 0;
+				boolean drawSeparation = true;
+				if (gap < 1.0) {
+					// If the gap is to small, we put a certain amount of of results in the same
+					// chunk
+					chunkSize = 1 / gap;
+					drawSeparation = false;
+				}
+				// Draw a rectangle for each product
+				e.gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight, 30, 30);
+				Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
+				for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
+					if (!drawSeparation) {
+						// Every chunkSize, we increment the chunk
+						var newChunk = (resultIndex % (int) chunkSize) == 0;
+						if (newChunk == true) {
+							chunk++;
+						}
+					} else {
+						chunk = (int) gap * resultIndex + 1;
+					}
+					System.out.println(chunk);
+					var result1 = p.getResult(resultIndex);
+					prevSubRectEdge = handleResult(e, productIndex, productResultsAmount, prevSubRectEdge,
+							resultIndex, result1, chunk, rectEdge, drawSeparation);
+				}
 			}
 
 			/**
@@ -164,14 +187,16 @@ public class ProductDisplay {
 			 * @param result               THe current result
 			 * @param gap                  Gap between 2 products
 			 * @param rectEdge             Position of product rectangle
+			 * @param drawSeparation
 			 * @return
 			 */
 			private Point handleResult(PaintEvent e, int productIndex, final int productResultsAmount,
-					Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge) {
+					Point prevSubRectEdge, int resultIndex, Result<CategorizedDescriptor> result, int gap,
+					Point rectEdge, boolean drawSeparation) {
 				// Draw a separator line between the current result, and the next one
-				Point sepStart = new Point(rectEdge.x + (resultIndex + 1) * (int) gap, rectEdge.y);
+				Point sepStart = new Point(rectEdge.x + gap, rectEdge.y);
 				Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
-				if (resultIndex != productResultsAmount - 1) {
+				if (drawSeparation && resultIndex != productResultsAmount - 1) {
 					e.gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				}
 				if (config.displayResultValue) {
@@ -181,9 +206,9 @@ public class ProductDisplay {
 				result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
 				result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
 				if (productIndex + 1 < products.size()) { // If there is a next product
-					Product p2 = products.get(productIndex + 1);
+					var p2 = products.get(productIndex + 1);
 					// We searh the first matching result
-					Optional<Result> result2 = p2.getList().stream().filter(r2 -> result.equals(r2)).findFirst();
+					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2)).findFirst();
 					if (result2.isPresent()) {
 						result.setTargetProductResult(result2.get());
 					}
@@ -194,13 +219,13 @@ public class ProductDisplay {
 			/**
 			 * Draw the links between each matching results
 			 * 
-			 * @param e
+			 * @param e The Paint Event
 			 */
 			private void drawLinks(PaintEvent e) {
-				for (Product product : products) {
-					for (Result result : product.getList()) {
+				for (var product : products) {
+					for (var result : product.getList()) {
 						Point p1 = result.getStartPoint();
-						Result result2 = result.getTargetProductResult();
+						var result2 = result.getTargetProductResult();
 						if (result2 != null) {
 							Point p2 = result2.getEndPoint();
 							drawBezierCurve(e, p1, p2);
