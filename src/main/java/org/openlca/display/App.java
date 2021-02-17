@@ -1,8 +1,11 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
@@ -10,7 +13,9 @@ import org.openlca.core.database.derby.DerbyDatabase;
 import org.openlca.core.matrix.ImpactIndex;
 import org.openlca.core.matrix.MatrixData;
 import org.openlca.core.matrix.TechIndex;
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ImpactDescriptor;
+import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
 import org.openlca.julia.Julia;
 
@@ -26,13 +31,16 @@ public class App {
 
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
-		Shell shell = new Shell(display);
+		Shell shell = new Shell(display, SWT.ON_TOP | SWT.CLOSE | SWT.TITLE);
 		shell.setText("Canvas Example");
 		shell.setLayout(new GridLayout());
-
-		String dbNames[] = { "ecoinvent_371_apos_unit_20201221", "agribalyse_v3_0_1" };
-		var products = getContributionResults(dbNames);
-//			List<Product<String>> products = createProducts(10, config);
+		List<Product> products;
+		if (!config.useFakeResults) {
+			String dbNames[] = { "ecoinvent_371_apos_unit_20201221", "agribalyse_v3_0_1" };
+			products = getContributionResults(dbNames);
+		} else {
+			products = createProducts(10, config);
+		}
 		new ProductDisplay(shell, products, config).display();
 		shell.open();
 		while (!shell.isDisposed()) {
@@ -74,26 +82,28 @@ public class App {
 		return list;
 	}
 
-//	private static List<Product<String>> createProducts(int productsAmount, Config config) {
-//		// Create random numbers, in order to be the product results
-//		List<String> results = new ArrayList<>();
-//		Random rand = new Random();
-//		for (int i = 0; i < config.NB_Product_Results; i++) {
-//			results.add(String.valueOf(rand.nextLong()));
-//		}
-//		List<Product<String>> products = new ArrayList<>();
-//		for (int i = 0; i < productsAmount; i++) {
-//			List<String> results2 = new ArrayList<>(results);
-//			Collections.shuffle(results2);
-//			List<Contribution<String>> l = new ArrayList<>();
-//			for (String string : results2) {
-//				Contribution<String> c = new Contribution<>();
-//				c.item = string;
-//				l.add(c);
-//			}
-//			var p1 = new Product<String>(l, "Product "+i);
-//			products.add(p1);
-//		}
-//		return products;
-//	}
+	private static List<Product> createProducts(int productsAmount, Config config) {
+		// Create random numbers, in order to be the product results
+		List<String> results = new ArrayList<>();
+		Random rand = new Random();
+		for (int i = 0; i < config.NB_Product_Results; i++) {
+			results.add(String.valueOf(rand.nextLong()));
+		}
+		List<Product> products = new ArrayList<>();
+		for (int i = 0; i < productsAmount; i++) {
+			List<String> results2 = new ArrayList<>(results);
+			Collections.shuffle(results2);
+			List<Contribution<CategorizedDescriptor>> l = new ArrayList<>();
+			for (String string : results2) {
+				Contribution<CategorizedDescriptor> c = new Contribution<>();
+				var p = new CategorizedDescriptor();
+				p.name = string;
+				c.item = p;
+				l.add(c);
+			}
+			var p1 = new Product(l, "Product " + i);
+			products.add(p1);
+		}
+		return products;
+	}
 }
