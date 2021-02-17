@@ -1,21 +1,16 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 
-import org.eclipse.swt.layout.FillLayout;
+import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 import org.openlca.core.database.derby.DerbyDatabase;
 import org.openlca.core.matrix.ImpactIndex;
 import org.openlca.core.matrix.MatrixData;
 import org.openlca.core.matrix.TechIndex;
-import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ImpactDescriptor;
-import org.openlca.core.model.descriptors.ProcessDescriptor;
-import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
 import org.openlca.julia.Julia;
 
@@ -33,12 +28,12 @@ public class App {
 		Display display = new Display();
 		Shell shell = new Shell(display);
 		shell.setText("Canvas Example");
-		shell.setLayout(new FillLayout());
-		String dbNames[] = {"ecoinvent_371_apos_unit_20201221","agribalyse_v3_0_1"};
+		shell.setLayout(new GridLayout());
+
+		String dbNames[] = { "ecoinvent_371_apos_unit_20201221", "agribalyse_v3_0_1" };
 		var products = getContributionResults(dbNames);
 //			List<Product<String>> products = createProducts(10, config);
 		new ProductDisplay(shell, products, config).display();
-
 		shell.open();
 		while (!shell.isDisposed()) {
 			if (!display.readAndDispatch()) {
@@ -46,7 +41,6 @@ public class App {
 			}
 		}
 		display.dispose();
-	
 
 	}
 

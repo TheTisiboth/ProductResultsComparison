@@ -5,12 +5,15 @@ import java.util.List;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Path;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
@@ -22,12 +25,14 @@ public class ProductDisplay {
 	private List<Product> products;
 	private Point screenSize;
 	private Config config;
-	final Point origin;
-	final int maxProductResultsAmout;
-	final int xMargin;
-	final int productHeight;
-	final int gapBetweenProduct;
-	final int theoreticalScreenHeight;
+	private final Point origin;
+	private final int maxProductResultsAmout;
+	private final int xMargin;
+	private final int productHeight;
+	private final int gapBetweenProduct;
+	private final int theoreticalScreenHeight;
+	private ComparisonCriteria comparisonCriteria;
+	private Canvas canvas;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -40,6 +45,7 @@ public class ProductDisplay {
 		productHeight = 30;
 		gapBetweenProduct = 300;
 		theoreticalScreenHeight = xMargin + (productHeight + gapBetweenProduct) * (products.size() - 1);
+		canvas = null;
 	}
 
 	/**
@@ -47,6 +53,23 @@ public class ProductDisplay {
 	 */
 	void display() {
 		System.out.println("Display start");
+		/**
+		 * Combo component
+		 */
+		final Combo c = new Combo(shell, SWT.READ_ONLY);
+		c.setBounds(50, 50, 150, 65);
+		String items[] = { "Location", "Category", "Amount" };
+		c.setItems(items);
+		c.select(0);
+		comparisonCriteria = ComparisonCriteria.getCriteria(c.getItem(0));
+		c.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
+				// Reset target product results for each results
+				products.stream().forEach(p -> p.getList().stream().forEach(r -> r.setTargetProductResult(null)));
+				canvas.redraw();
+			}
+		});
 		/**
 		 * Composite component
 		 */
@@ -57,7 +80,7 @@ public class ProductDisplay {
 		/**
 		 * Canvas component
 		 */
-		Canvas canvas = new Canvas(composite, SWT.V_SCROLL);
+		canvas = new Canvas(composite, SWT.V_SCROLL);
 		canvas.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
 		/**
@@ -70,7 +93,6 @@ public class ProductDisplay {
 		addScrollListener(canvas, vBar);
 		addResizeEvent(composite, canvas, vBar);
 		addPaintListener(composite, canvas);
-//		canvas.redraw();
 	}
 
 	/**
@@ -216,8 +238,8 @@ public class ProductDisplay {
 			 * @return
 			 */
 			private Point handleResult(PaintEvent e, int productIndex, final int productResultsAmount,
-					Point prevSubRectEdge, int resultIndex, Result result, int gap,
-					Point rectEdge, boolean drawSeparation) {
+					Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge,
+					boolean drawSeparation) {
 				// Draw a separator line between the current result, and the next one
 				Point sepStart = new Point(rectEdge.x + gap, rectEdge.y);
 				Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
@@ -233,7 +255,7 @@ public class ProductDisplay {
 				if (productIndex + 1 < products.size()) { // If there is a next product
 					var p2 = products.get(productIndex + 1);
 					// We search the first matching result
-					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2,config.comparisonCriteria)).findFirst();
+					var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
 					if (result2.isPresent()) {
 						result.setTargetProductResult(result2.get());
 					}
