@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
+import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 
 public class Product {
@@ -51,5 +52,85 @@ public class Product {
 		}
 		s += " ]";
 		return s;
+	}
+
+	public void sort(ComparisonCriteria criteria) {
+		switch (criteria) {
+		case AMOUNT:
+			list.sort((r1, r2) -> {
+				double a1 = r1.getContribution().amount;
+				double a2 = r2.getContribution().amount;
+				if(a1 == -1.369540239621623E-4) {
+					System.out.println("ko");
+				}
+				if (a1 == 0.0 && a2 != 0.0) {
+					return 1;
+				}else if(a1 != 0.0 && a2 == 0.0) {
+					return -1;
+				}
+				if (a2 > a1) {
+					return 1;
+				}
+				if (a1 > a2) {
+					return -1;
+				}
+				return 0;
+			});
+			break;
+		case CATEGORY:
+			list.sort((r1, r2) -> {
+				Long c1 = ((ProcessDescriptor) r1.getContribution().item).category;
+				Long c2 = ((ProcessDescriptor) r2.getContribution().item).category;
+				if (c1 == null && c2 == null) {
+					return 0;
+				} else if (c1 == null && c2 != null) {
+					return 1;
+				} else if (c1 != null && c2 == null) {
+					return -1;
+				}
+				long result = c1.longValue() - c2.longValue();
+				if (result < 0) {
+					return 1;
+				}
+				if (result > 0) {
+					return -1;
+				}
+				return 0;
+			});
+			break;
+		case LOCATION:
+			list.sort((r1, r2) -> {
+				try {
+					Long l1 = ((ProcessDescriptor) r1.getContribution().item).location;
+					Long l2 = ((ProcessDescriptor) r2.getContribution().item).location;
+					if (l1 == null && l2 == null) {
+						return 0;
+					} else if (l1 == null && l2 != null) {
+						return 1;
+					} else if (l1 != null && l2 == null) {
+						return -1;
+					}
+					long result = l1.longValue() - l2.longValue();
+					if (result < 0) {
+						return 1;
+					}
+					if (result > 0) {
+						return -1;
+					}
+					return 0;
+				} catch (ClassCastException e) {
+					// If the item is not a ProcessDescriptor, there is no location field. Hence, we
+					// can not sort on this item
+					return 0;
+				}
+			});
+			break;
+		default:
+			throw new IllegalArgumentException("Unexpected value: " + criteria);
+		}
+	}
+
+	public void resetTargetProductResult() {
+		list.stream().forEach(r -> r.setTargetProductResult(null));
 	}
 }

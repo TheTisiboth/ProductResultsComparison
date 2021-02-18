@@ -15,6 +15,7 @@ import org.openlca.core.matrix.MatrixData;
 import org.openlca.core.matrix.TechIndex;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ImpactDescriptor;
+import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
 import org.openlca.julia.Julia;
@@ -31,7 +32,7 @@ public class App {
 
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
-		Shell shell = new Shell(display, SWT.ON_TOP | SWT.CLOSE | SWT.TITLE);
+		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE);
 		shell.setText("Canvas Example");
 		shell.setLayout(new GridLayout());
 		List<Product> products;
@@ -74,7 +75,7 @@ public class App {
 						impact = next;
 					}
 				}
-				var cs = result.getProcessContributions(impact);
+				List<Contribution<CategorizedDescriptor>> cs = result.getProcessContributions(impact);
 				var p = new Product(cs, dbName);
 				list.add(p);
 			}
@@ -96,9 +97,10 @@ public class App {
 			List<Contribution<CategorizedDescriptor>> l = new ArrayList<>();
 			for (String string : results2) {
 				Contribution<CategorizedDescriptor> c = new Contribution<>();
-				var p = new CategorizedDescriptor();
+				var p = new ProcessDescriptor();
 				p.name = string;
 				c.item = p;
+				c.amount = Double.valueOf(string);
 				l.add(c);
 			}
 			var p1 = new Product(l, "Product " + i);

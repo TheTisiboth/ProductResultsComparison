@@ -2,6 +2,7 @@ package org.openlca.display;
 
 import java.util.List;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
@@ -22,6 +23,7 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
+import org.openlca.core.model.descriptors.ProcessDescriptor;
 
 public class ProductDisplay {
 	private Shell shell;
@@ -38,6 +40,7 @@ public class ProductDisplay {
 	private Canvas canvas;
 	private Image cache;
 	private Composite composite;
+	private double maxAmount;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -52,6 +55,9 @@ public class ProductDisplay {
 		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
 		canvas = null;
 		composite = null;
+		maxAmount = 1;
+		comparisonCriteria = config.comparisonCriteria;
+		sortProducts();
 	}
 
 	/**
@@ -82,12 +88,10 @@ public class ProductDisplay {
 
 		addScrollListener(canvas, vBar);
 		addResizeEvent(composite, canvas, vBar);
-		// Cached image, in which we draw the things, and then display it once it is
-		// finished
+
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		GC gc = new GC(cache);
-		cachedPaint(gc, composite); // Costly painting, so we cache it; Called one time at the beginning
-		addPaintListener(composite, canvas, gc); // Once finished, we really paint the cache
+		cachedPaint(); //
+		addPaintListener(composite, canvas); // Once finished, we really paint the cache
 	}
 
 	/**
@@ -96,15 +100,16 @@ public class ProductDisplay {
 	private void createCombo() {
 		final Combo c = new Combo(shell, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
-		String items[] = { "Location", "Category", "Amount" };
-		c.setItems(items);
-		c.select(0);
-		comparisonCriteria = ComparisonCriteria.getCriteria(c.getItem(0));
+		var criterias = ComparisonCriteria.valuesToString();
+		var indexSelectedCriteria = ArrayUtils.indexOf(criterias, config.comparisonCriteria.toString());
+		c.setItems(criterias);
+		c.select(indexSelectedCriteria);
 		c.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 				// We reset the target product results
-				products.stream().forEach(p -> p.getList().stream().forEach(r -> r.setTargetProductResult(null)));
+				products.stream().forEach(p -> p.resetTargetProductResult());
+				sortProducts();
 				redraw();
 			}
 		});
@@ -114,10 +119,11 @@ public class ProductDisplay {
 	 * Allow to redraw everything
 	 */
 	private void redraw() {
-		screenSize = shell.getSize();
+		screenSize = composite.getSize();
+		// Cached image, in which we draw the things, and then display it once it is
+		// finished
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		GC gc = new GC(cache);
-		cachedPaint(gc, composite);
+		cachedPaint(); // Costly painting, so we cache it; Called one time at the beginning
 		canvas.redraw();
 	}
 
@@ -129,8 +135,9 @@ public class ProductDisplay {
 	 * @param gc        The GC component
 	 * @param composite The parent component
 	 */
-	private void cachedPaint(GC gc, Composite composite) {
-		screenSize = shell.getSize(); // Responsive behavior
+	private void cachedPaint() {
+		GC gc = new GC(cache);
+		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin); // Start point of the first product
 		// rectangle
@@ -163,18 +170,21 @@ public class ProductDisplay {
 			// chunk
 			chunkSize = (int) Math.ceil(1 / gap);
 			drawSeparation = false;
+			productWidth = (int) (productResultsAmount / chunkSize);
+		} else {
+			productWidth = (int) gap * productResultsAmount;
 		}
 		// Draw a rectangle for each product
-		gc.drawRoundRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight, 30, 30);
+		gc.drawRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight);
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x + 11, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
 		Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
 		for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
 			chunk = computeChunk(gap, chunk, chunkSize, drawSeparation, resultIndex);
-			var result1 = p.getResult(resultIndex);
-			prevSubRectEdge = handleResult(gc, productIndex, productResultsAmount, prevSubRectEdge, resultIndex,
-					result1, chunk, rectEdge, drawSeparation);
+			var result = p.getResult(resultIndex);
+			prevSubRectEdge = handleResult(gc, productIndex, productResultsAmount, prevSubRectEdge, resultIndex, result,
+					chunk, rectEdge, drawSeparation);
 		}
 	}
 
@@ -198,7 +208,7 @@ public class ProductDisplay {
 				chunk++;
 			}
 		} else {
-			chunk = (int) gap * resultIndex + 1;
+			chunk = (int) gap * (resultIndex + 1);
 		}
 		return chunk;
 	}
@@ -225,19 +235,40 @@ public class ProductDisplay {
 		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
 		if (drawSeparation && resultIndex != productResultsAmount - 1) {
 			gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+		} else if (!drawSeparation && resultIndex != productResultsAmount - 1) {
+			boolean contributionEmpty = false;
+			switch (comparisonCriteria) {
+			case AMOUNT:
+				contributionEmpty = result.getContribution().amount == 0.0;
+				break;
+			case CATEGORY:
+				contributionEmpty = result.getContribution().item.category == null;
+				break;
+			case LOCATION:
+				contributionEmpty = ((ProcessDescriptor) result.getContribution().item).location == null;
+				break;
+			}
+			if (contributionEmpty) {
+				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
+				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+			}
 		}
+
 		if (config.displayResultValue) {
 			Point textPos = new Point(prevSubRectEdge.x + 10, (sepEnd.y + sepStart.y) / 2 - 10);
 			gc.drawText(result.toString(), textPos.x, textPos.y);
 		}
 		result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
 		result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
-		if (productIndex + 1 < products.size()) { // If there is a next product
-			var p2 = products.get(productIndex + 1);
-			// We search the first matching result
-			var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
-			if (result2.isPresent()) {
-				result.setTargetProductResult(result2.get());
+		if (comparisonCriteria.equals(ComparisonCriteria.AMOUNT) && result.getContribution().amount != 0.0) {
+			if (productIndex + 1 < products.size()) { // If there is a next product
+				var p2 = products.get(productIndex + 1);
+				// We search the first matching result
+				var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
+				if (result2.isPresent()) {
+					result.setTargetProductResult(result2.get());
+				}
 			}
 		}
 		return sepStart;
@@ -251,11 +282,12 @@ public class ProductDisplay {
 	private void drawLinks(GC gc) {
 		for (var product : products) {
 			for (var result : product.getList()) {
+				int normalizedAmount = (int) (result.getContribution().amount / maxAmount * 255);
 				Point p1 = result.getStartPoint();
 				var result2 = result.getTargetProductResult();
 				if (result2 != null) {
 					Point p2 = result2.getEndPoint();
-					drawBezierCurve(gc, p1, p2);
+					drawBezierCurve(gc, p1, p2, normalizedAmount);
 				}
 			}
 		}
@@ -267,8 +299,9 @@ public class ProductDisplay {
 	 * @param e     The Paint Event
 	 * @param start The starting point
 	 * @param end   The ending point
+	 * @param alpha
 	 */
-	private void drawBezierCurve(GC gc, Point start, Point end) {
+	private void drawBezierCurve(GC gc, Point start, Point end, int alpha) {
 		Path p = new Path(gc.getDevice());
 		p.moveTo(start.x, start.y);
 		int offset = 100;
@@ -329,12 +362,18 @@ public class ProductDisplay {
 	 * @param composite Parent composent of the canvas
 	 * @param canvas    A Canvas component
 	 */
-	private void addPaintListener(Composite composite, Canvas canvas, GC gc) {
+	private void addPaintListener(Composite composite, Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
 				screenSize = composite.getSize(); // Responsive behavior
 				e.gc.drawImage(cache, origin.x, origin.y);
 			}
 		});
+	}
+
+	private void sortProducts() {
+		// Sort by descending amount
+		products.stream().forEach(p -> p.sort(comparisonCriteria));
+		maxAmount = products.stream().mapToDouble(p -> p.getList().get(0).getContribution().amount).max().getAsDouble();
 	}
 }
