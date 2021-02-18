@@ -105,8 +105,8 @@ public class Result {
 				throw new IllegalArgumentException("Unexpected value: " + criteria);
 			}
 			return comparison;
-		} catch (Exception e) {
-			return contribution.item.equals(r.contribution.item);
+		} catch (NullPointerException e) {
+			return false;
 		}
 	}
 }

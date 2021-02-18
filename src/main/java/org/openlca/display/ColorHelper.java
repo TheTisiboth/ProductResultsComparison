@@ -1,3 +1,11 @@
+/**
+ * Projekt ANNtool 
+ *
+ * Copyright (c) 2011 github.com/timaschew/jANN
+ * https://gist.github.com/timaschew/1249413
+ * 
+ * timaschew
+ */
 package org.openlca.display;
 
 import java.awt.Color;
@@ -18,8 +26,7 @@ public class ColorHelper {
 
 	/**
 	 * 
-	 * @param value
-	 *            should be from 0 unti 100
+	 * @param value should be from 0 unti 100
 	 */
 	public static Color numberToColor(final double value) {
 		if (value < 0 || value > 100) {
@@ -29,8 +36,7 @@ public class ColorHelper {
 	}
 
 	/**
-	 * @param value
-	 *            should be from 0 unti 1
+	 * @param value should be from 0 unti 1
 	 * @return
 	 */
 	public static Color numberToColorPercentage(final double value) {
@@ -99,10 +105,8 @@ public class ColorHelper {
 	private static void initList(final HashMap<Integer, Color> localMap) {
 		List<Integer> list = new ArrayList<Integer>(localMap.keySet());
 		Collections.sort(list);
-		Integer min = list.get(0);
 		Integer max = list.get(list.size() - 1);
 		factor = max + 1;
-		System.out.println(factor);
 	}
 
 	/**

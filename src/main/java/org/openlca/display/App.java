@@ -38,7 +38,9 @@ public class App {
 		List<Product> products;
 		if (!config.useFakeResults) {
 			String dbNames[] = { "ecoinvent_371_apos_unit_20201221", "agribalyse_v3_0_1" };
-			products = getContributionResults(dbNames);
+			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
+//			products = getContributionResults(dbNames, impactIndexes);
+			products = getHighestContributionResults(dbNames);
 		} else {
 			products = createProducts(10, config);
 		}
@@ -53,7 +55,7 @@ public class App {
 
 	}
 
-	private static List<Product> getContributionResults(String dbNames[]) {
+	private static List<Product> getHighestContributionResults(String dbNames[]) {
 		var list = new ArrayList<Product>();
 		println("Connect to databases ");
 		for (String dbName : dbNames) {
@@ -78,6 +80,27 @@ public class App {
 				List<Contribution<CategorizedDescriptor>> cs = result.getProcessContributions(impact);
 				var p = new Product(cs, dbName);
 				list.add(p);
+			}
+		}
+		return list;
+	}
+
+	private static List<Product> getContributionResults(String dbNames[], int impactIndexes[]) {
+		var list = new ArrayList<Product>();
+		println("Connect to databases ");
+		for (String dbName : dbNames) {
+			try (var db = DerbyDatabase.fromDataDir(dbName)) {
+				var techIndex = TechIndex.unlinkedOf(db);
+				var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
+				var result = ContributionResult.of(db, data);
+				for (int index : impactIndexes) {
+					if (index > 0 && index < result.impactIndex.size()) {
+						List<Contribution<CategorizedDescriptor>> cs = result
+								.getProcessContributions(result.impactIndex.at(index));
+						var p = new Product(cs, dbName);
+						list.add(p);
+					}
+				}
 			}
 		}
 		return list;

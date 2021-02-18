@@ -1,6 +1,9 @@
 package org.openlca.display;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
@@ -26,6 +29,7 @@ import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
+import org.openlca.util.Pair;
 
 public class ProductDisplay {
 	private Shell shell;
@@ -44,6 +48,7 @@ public class ProductDisplay {
 	private Composite composite;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
+	private List<Map<RGB, Category>> categories;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -61,6 +66,10 @@ public class ProductDisplay {
 		maxCriteriaValue = 0;
 		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
+		categories = new ArrayList<>();
+		for (int i = 0; i < products.size(); i++) {
+			categories.add(new HashMap<RGB, Category>());
+		}
 		sortProducts();
 	}
 
@@ -110,11 +119,14 @@ public class ProductDisplay {
 		c.select(indexSelectedCriteria);
 		c.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
-				comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
-				// We reset the target product results
-				products.stream().forEach(p -> p.resetTargetProductResult());
-				sortProducts();
-				redraw();
+				ComparisonCriteria newCriteria = ComparisonCriteria.getCriteria(c.getText());
+				if (newCriteria != comparisonCriteria) {
+					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
+					// We reset the target product results
+					products.stream().forEach(p -> p.resetTargetProductResult());
+					sortProducts();
+					redraw();
+				}
 			}
 		});
 	}
@@ -184,11 +196,13 @@ public class ProductDisplay {
 		Point textPos = new Point(rectEdge.x + 11, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
 		Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
+		Category previousCategory = null;
+		var pair = new Pair<>(prevSubRectEdge, previousCategory);
 		for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
 			chunk = computeChunk(gap, chunk, chunkSize, drawSeparation, resultIndex);
 			var result = p.getResult(resultIndex);
-			prevSubRectEdge = handleResult(gc, productIndex, productResultsAmount, prevSubRectEdge, resultIndex, result,
-					chunk, rectEdge, drawSeparation);
+			pair = handleResult(gc, productIndex, productResultsAmount, pair.first, resultIndex, result, chunk,
+					rectEdge, drawSeparation, pair.second);
 		}
 	}
 
@@ -230,37 +244,50 @@ public class ProductDisplay {
 	 * @param gap                  Gap between 2 products
 	 * @param rectEdge             Position of product rectangle
 	 * @param drawSeparation
+	 * @param previousRGB
 	 * @return
 	 */
-	private Point handleResult(GC gc, int productIndex, final int productResultsAmount, Point prevSubRectEdge,
-			int resultIndex, Result result, int gap, Point rectEdge, boolean drawSeparation) {
+	private Pair<Point, Category> handleResult(GC gc, int productIndex, final int productResultsAmount,
+			Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge, boolean drawSeparation,
+			Category previousCategory) {
 		// Draw a separator line between the current result, and the next one
 		Point sepStart = new Point(rectEdge.x + gap, rectEdge.y);
 		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
+		boolean contributionEmpty = false;
+		switch (comparisonCriteria) {
+		case AMOUNT:
+			contributionEmpty = result.getContribution().amount == 0.0;
+			break;
+		case CATEGORY:
+			contributionEmpty = result.getContribution().item.category == null;
+			break;
+		case LOCATION:
+			contributionEmpty = ((ProcessDescriptor) result.getContribution().item).location == null;
+			break;
+		}
 		if (drawSeparation && resultIndex != productResultsAmount - 1) {
 			gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 		} else if (!drawSeparation && resultIndex != productResultsAmount - 1) {
-			boolean contributionEmpty = false;
-			switch (comparisonCriteria) {
-			case AMOUNT:
-				contributionEmpty = result.getContribution().amount == 0.0;
-				break;
-			case CATEGORY:
-				contributionEmpty = result.getContribution().item.category == null;
-				break;
-			case LOCATION:
-				contributionEmpty = ((ProcessDescriptor) result.getContribution().item).location == null;
-				break;
-			}
+
 			if (contributionEmpty) {
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
 				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
 			} else {
-				RGB rgb = result.createColor(comparisonCriteria,minCriteriaValue, maxCriteriaValue);
+				RGB rgb = result.createColor(comparisonCriteria, minCriteriaValue, maxCriteriaValue);
 				gc.setForeground(new Color(gc.getDevice(), rgb));
 				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+				if (previousCategory == null) {
+					previousCategory = new Category(resultIndex, rgb);
+				} else {
+					if (previousCategory.getRgb() != rgb) {
+						previousCategory.setEndIndex(resultIndex - 1);
+						categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
+						Category newCategory = new Category(resultIndex, rgb);
+						previousCategory = newCategory;
+					}
+				}
 			}
 		}
 
@@ -270,17 +297,17 @@ public class ProductDisplay {
 		}
 		result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
 		result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
-		if (comparisonCriteria.equals(ComparisonCriteria.AMOUNT) && result.getContribution().amount != 0.0) {
-			if (productIndex + 1 < products.size()) { // If there is a next product
-				var p2 = products.get(productIndex + 1);
-				// We search the first matching result
-				var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
-				if (result2.isPresent()) {
-					result.setTargetProductResult(result2.get());
-				}
-			}
-		}
-		return sepStart;
+//		if (!contributionEmpty) {
+//			if (productIndex + 1 < products.size()) { // If there is a next product
+//				var p2 = products.get(productIndex + 1);
+//				// We search the first matching result
+//				var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
+//				if (result2.isPresent()) {
+//					result.setTargetProductResult(result2.get());
+//				}
+//			}
+//		}
+		return new Pair<Point, Category>(sepStart, previousCategory);
 	}
 
 	/**
@@ -289,17 +316,44 @@ public class ProductDisplay {
 	 * @param e The Paint Event
 	 */
 	private void drawLinks(GC gc) {
-		for (var product : products) {
-			for (var result : product.getList()) {
-				int normalizedAmount = (int) (result.getContribution().amount / maxCriteriaValue * 255);
-				Point p1 = result.getStartPoint();
-				var result2 = result.getTargetProductResult();
-				if (result2 != null) {
-					Point p2 = result2.getEndPoint();
-					drawBezierCurve(gc, p1, p2, normalizedAmount);
+		for (int productIndex = 0; productIndex < categories.size(); productIndex++) {
+			if (productIndex < categories.size() - 1) {
+				var map = categories.get(productIndex);
+				for (Map.Entry<RGB, Category> entry : map.entrySet()) {
+					var nextMap = categories.get(productIndex + 1);
+					var linkedCategory = nextMap.get(entry.getKey());
+					if (linkedCategory != null) {
+						var c1 = entry.getValue();
+						int resultIndex1 = 0;
+						if (c1.getEndIndex() != c1.getStartIndex()) {
+							resultIndex1 = (c1.getEndIndex() + c1.getStartIndex()) / 2;
+						} else {
+							resultIndex1 = c1.getStartIndex();
+						}
+						int resultIndex2 = 0;
+						if (linkedCategory.getEndIndex() != linkedCategory.getStartIndex()) {
+							resultIndex2 = (linkedCategory.getEndIndex() + linkedCategory.getStartIndex()) / 2;
+						} else {
+							resultIndex2 = linkedCategory.getStartIndex();
+						}
+						var p1 = products.get(productIndex).getList().get(resultIndex1).getStartPoint();
+						var p2 = products.get(productIndex + 1).getList().get(resultIndex2).getEndPoint();
+						drawBezierCurve(gc, p1, p2, 0);
+					}
 				}
 			}
 		}
+//		for (var product : products) {
+//			for (var result : product.getList()) {
+//				int normalizedAmount = (int) (result.getContribution().amount / maxCriteriaValue * 255);
+//				Point p1 = result.getStartPoint();
+//				var result2 = result.getTargetProductResult();
+//				if (result2 != null) {
+//					Point p2 = result2.getEndPoint();
+//					drawBezierCurve(gc, p1, p2, normalizedAmount);
+//				}
+//			}
+//		}
 	}
 
 	/**
