@@ -24,6 +24,32 @@ public class Product {
 		}
 	}
 
+	public double min(ComparisonCriteria criteria) {
+		switch (criteria) {
+		case AMOUNT:
+			return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
+		case CATEGORY:
+			return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
+		case LOCATION:
+			return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+					.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
+		}
+		return 0;
+	}
+
+	public double max(ComparisonCriteria criteria) {
+		switch (criteria) {
+		case AMOUNT:
+			return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
+		case CATEGORY:
+			return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
+		case LOCATION:
+			return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+					.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
+		}
+		return 0;
+	}
+
 	public String getName() {
 		return name;
 	}
@@ -60,12 +86,9 @@ public class Product {
 			list.sort((r1, r2) -> {
 				double a1 = r1.getContribution().amount;
 				double a2 = r2.getContribution().amount;
-				if(a1 == -1.369540239621623E-4) {
-					System.out.println("ko");
-				}
 				if (a1 == 0.0 && a2 != 0.0) {
 					return 1;
-				}else if(a1 != 0.0 && a2 == 0.0) {
+				} else if (a1 != 0.0 && a2 == 0.0) {
 					return -1;
 				}
 				if (a2 > a1) {

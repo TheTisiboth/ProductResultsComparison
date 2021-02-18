@@ -8,10 +8,12 @@ import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Path;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -40,7 +42,8 @@ public class ProductDisplay {
 	private Canvas canvas;
 	private Image cache;
 	private Composite composite;
-	private double maxAmount;
+	private double maxCriteriaValue;
+	private double minCriteriaValue;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -55,7 +58,8 @@ public class ProductDisplay {
 		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
 		canvas = null;
 		composite = null;
-		maxAmount = 1;
+		maxCriteriaValue = 0;
+		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
 		sortProducts();
 	}
@@ -252,6 +256,11 @@ public class ProductDisplay {
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
 				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+			} else {
+				RGB rgb = result.createColor(comparisonCriteria,minCriteriaValue, maxCriteriaValue);
+				gc.setForeground(new Color(gc.getDevice(), rgb));
+				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
 			}
 		}
 
@@ -282,7 +291,7 @@ public class ProductDisplay {
 	private void drawLinks(GC gc) {
 		for (var product : products) {
 			for (var result : product.getList()) {
-				int normalizedAmount = (int) (result.getContribution().amount / maxAmount * 255);
+				int normalizedAmount = (int) (result.getContribution().amount / maxCriteriaValue * 255);
 				Point p1 = result.getStartPoint();
 				var result2 = result.getTargetProductResult();
 				if (result2 != null) {
@@ -374,6 +383,8 @@ public class ProductDisplay {
 	private void sortProducts() {
 		// Sort by descending amount
 		products.stream().forEach(p -> p.sort(comparisonCriteria));
-		maxAmount = products.stream().mapToDouble(p -> p.getList().get(0).getContribution().amount).max().getAsDouble();
+		maxCriteriaValue = products.stream().mapToDouble(p -> p.max(comparisonCriteria)).max().getAsDouble();
+		minCriteriaValue = products.stream().mapToDouble(p -> p.min(comparisonCriteria)).min().getAsDouble();
+		System.out.println();
 	}
 }
