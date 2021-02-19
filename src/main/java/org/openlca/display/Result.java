@@ -11,14 +11,12 @@ public class Result {
 	private Contribution<CategorizedDescriptor> contribution;
 	private Point startPoint; // Point from which a links start
 	private Point endPoint; // Point to which the links ends
-	private Result targetProductResult;
 	private RGB rgb;
 
 	public Result(Contribution<CategorizedDescriptor> item) {
 		contribution = item;
 		startPoint = null;
 		endPoint = null;
-		targetProductResult = null;
 	}
 
 	public RGB createColor(ComparisonCriteria criteria, double min, double max) {
@@ -50,14 +48,6 @@ public class Result {
 		this.contribution = contribution;
 	}
 
-	public Result getTargetProductResult() {
-		return targetProductResult;
-	}
-
-	public void setTargetProductResult(Result targetProductResult) {
-		this.targetProductResult = targetProductResult;
-	}
-
 	public void setStartPoint(int x, int y) {
 		startPoint = new Point(x, y);
 	}
@@ -72,6 +62,22 @@ public class Result {
 
 	public Point getEndPoint() {
 		return endPoint;
+	}
+	
+	public boolean isContributionEmpty( ComparisonCriteria comparisonCriteria) {
+		boolean contributionEmpty = false;
+		switch (comparisonCriteria) {
+		case AMOUNT:
+			contributionEmpty = contribution.amount == 0.0;
+			break;
+		case CATEGORY:
+			contributionEmpty = contribution.item.category == null;
+			break;
+		case LOCATION:
+			contributionEmpty = ((ProcessDescriptor) contribution.item).location == null;
+			break;
+		}
+		return contributionEmpty;
 	}
 
 	@Override

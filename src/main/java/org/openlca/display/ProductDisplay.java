@@ -28,7 +28,6 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
-import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.util.Pair;
 
 public class ProductDisplay {
@@ -36,7 +35,7 @@ public class ProductDisplay {
 	private List<Product> products;
 	private Point screenSize;
 	private Config config;
-	private final Point origin;
+	private Point origin;
 	private final int maxProductResultsAmout;
 	private final int xMargin;
 	private final int productHeight;
@@ -122,8 +121,12 @@ public class ProductDisplay {
 				ComparisonCriteria newCriteria = ComparisonCriteria.getCriteria(c.getText());
 				if (newCriteria != comparisonCriteria) {
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
-					// We reset the target product results
-					products.stream().forEach(p -> p.resetTargetProductResult());
+					origin = new Point(0, 0);
+					// We reset the categories
+					for (int i = 0; i < categories.size(); i++) {
+						categories.set(i, new HashMap<>());
+					}
+//					categories.stream().forEach(m -> new HashMap<>());
 					sortProducts();
 					redraw();
 				}
@@ -155,8 +158,8 @@ public class ProductDisplay {
 		GC gc = new GC(cache);
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
-		Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin); // Start point of the first product
-		// rectangle
+		// Start point of the first product rectangle
+		Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin);
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
 			handleProduct(gc, maxProductWidth, rectEdge, productIndex);
 			rectEdge.y += 300;
@@ -176,12 +179,13 @@ public class ProductDisplay {
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex) {
 		var p = products.get(productIndex);
 		final int productResultsAmount = p.getList().size();
-		int productWidth = (int) (((double) productResultsAmount / (double) maxProductResultsAmout) * maxProductWidth);
+//		int productWidth = (int) (((double) productResultsAmount / (double) maxProductResultsAmout) * maxProductWidth);
+		int productWidth = (int) maxProductWidth;
 		// It is the gap between two results
 		double gap = ((double) productWidth / productResultsAmount);
 		int chunk = -1, chunkSize = 0;
 		boolean drawSeparation = true;
-		if (gap < 1.0) {
+		if (gap < 3.0) {
 			// If the gap is to small, we put a certain amount of results in the same
 			// chunk
 			chunkSize = (int) Math.ceil(1 / gap);
@@ -190,6 +194,7 @@ public class ProductDisplay {
 		} else {
 			productWidth = (int) gap * productResultsAmount;
 		}
+		p.setDrawSeparation(drawSeparation);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight);
 		// Draw the product name
@@ -251,22 +256,24 @@ public class ProductDisplay {
 			Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge, boolean drawSeparation,
 			Category previousCategory) {
 		// Draw a separator line between the current result, and the next one
-		Point sepStart = new Point(rectEdge.x + gap, rectEdge.y);
-		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight);
-		boolean contributionEmpty = false;
-		switch (comparisonCriteria) {
-		case AMOUNT:
-			contributionEmpty = result.getContribution().amount == 0.0;
-			break;
-		case CATEGORY:
-			contributionEmpty = result.getContribution().item.category == null;
-			break;
-		case LOCATION:
-			contributionEmpty = ((ProcessDescriptor) result.getContribution().item).location == null;
-			break;
+		Point sepStart = new Point(rectEdge.x + gap , rectEdge.y);
+		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight - 1);
+		boolean contributionEmpty = result.isContributionEmpty(comparisonCriteria);
+		RGB rgb = null;
+		if (!contributionEmpty) {
+			rgb = result.createColor(comparisonCriteria, minCriteriaValue, maxCriteriaValue);
 		}
 		if (drawSeparation && resultIndex != productResultsAmount - 1) {
 			gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
+			if (contributionEmpty) {
+				gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
+			} else {
+				gc.setBackground(new Color(gc.getDevice(), rgb));
+			}
+			gc.fillRectangle(prevSubRectEdge.x + 1, prevSubRectEdge.y + 1, sepStart.x - prevSubRectEdge.x - 1,
+					productHeight - 1);
+
+			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
 		} else if (!drawSeparation && resultIndex != productResultsAmount - 1) {
 
 			if (contributionEmpty) {
@@ -274,39 +281,40 @@ public class ProductDisplay {
 				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
 			} else {
-				RGB rgb = result.createColor(comparisonCriteria, minCriteriaValue, maxCriteriaValue);
 				gc.setForeground(new Color(gc.getDevice(), rgb));
 				gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
-				if (previousCategory == null) {
-					previousCategory = new Category(resultIndex, rgb);
-				} else {
-					if (previousCategory.getRgb() != rgb) {
-						previousCategory.setEndIndex(resultIndex - 1);
-						categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
-						Category newCategory = new Category(resultIndex, rgb);
-						previousCategory = newCategory;
+
+			}
+		}
+		if (!contributionEmpty) {
+			if (previousCategory == null) {
+				previousCategory = new Category(resultIndex, rgb);
+			} else {
+				if (previousCategory.getRgb() != rgb) {
+					// We are in a new category
+					previousCategory.setEndIndex(resultIndex - 1);
+					int resultIndex1 = 0;
+					// We look for the result in the middle of the category
+					if (previousCategory.getEndIndex() != previousCategory.getStartIndex()) {
+						resultIndex1 = (previousCategory.getEndIndex() + previousCategory.getStartIndex()) / 2;
+					} else {
+						resultIndex1 = previousCategory.getStartIndex();
 					}
+					previousCategory.setStartingResult(products.get(productIndex).getList().get(resultIndex1));
+					previousCategory.setEndSeparation(sepStart, sepEnd);
+					categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
+					Category newCategory = new Category(resultIndex, rgb);
+					previousCategory = newCategory;
 				}
 			}
 		}
-
 		if (config.displayResultValue) {
 			Point textPos = new Point(prevSubRectEdge.x + 10, (sepEnd.y + sepStart.y) / 2 - 10);
 			gc.drawText(result.toString(), textPos.x, textPos.y);
 		}
-		result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y);
-		result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y);
-//		if (!contributionEmpty) {
-//			if (productIndex + 1 < products.size()) { // If there is a next product
-//				var p2 = products.get(productIndex + 1);
-//				// We search the first matching result
-//				var result2 = p2.getList().stream().filter(r2 -> result.equals(r2, comparisonCriteria)).findFirst();
-//				if (result2.isPresent()) {
-//					result.setTargetProductResult(result2.get());
-//				}
-//			}
-//		}
+		result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y + 2);
+		result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y - 2);
 		return new Pair<Point, Category>(sepStart, previousCategory);
 	}
 
@@ -317,43 +325,32 @@ public class ProductDisplay {
 	 */
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < categories.size(); productIndex++) {
-			if (productIndex < categories.size() - 1) {
-				var map = categories.get(productIndex);
-				for (Map.Entry<RGB, Category> entry : map.entrySet()) {
+			System.out.println("Product " + productIndex + " : " + categories.get(productIndex).size() + " categories");
+
+			var map = categories.get(productIndex);
+			var categoryIndex = 0;
+			for (Map.Entry<RGB, Category> entry : map.entrySet()) {
+				var c1 = entry.getValue();
+				if (categoryIndex < map.entrySet().size() - 1 && !products.get(productIndex).getDrawSeparation()) {
+					var sepEnd = c1.getEndSeparation();
+					gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+					gc.drawLine(sepEnd.first.x, sepEnd.first.y, sepEnd.second.x, sepEnd.second.y);
+					gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+				}
+				if (productIndex < categories.size() - 1) {
 					var nextMap = categories.get(productIndex + 1);
 					var linkedCategory = nextMap.get(entry.getKey());
 					if (linkedCategory != null) {
-						var c1 = entry.getValue();
-						int resultIndex1 = 0;
-						if (c1.getEndIndex() != c1.getStartIndex()) {
-							resultIndex1 = (c1.getEndIndex() + c1.getStartIndex()) / 2;
-						} else {
-							resultIndex1 = c1.getStartIndex();
-						}
-						int resultIndex2 = 0;
-						if (linkedCategory.getEndIndex() != linkedCategory.getStartIndex()) {
-							resultIndex2 = (linkedCategory.getEndIndex() + linkedCategory.getStartIndex()) / 2;
-						} else {
-							resultIndex2 = linkedCategory.getStartIndex();
-						}
-						var p1 = products.get(productIndex).getList().get(resultIndex1).getStartPoint();
-						var p2 = products.get(productIndex + 1).getList().get(resultIndex2).getEndPoint();
-						drawBezierCurve(gc, p1, p2, 0);
+
+						var startPoint = c1.getStartingResult().getStartPoint();
+						var endPoint = linkedCategory.getStartingResult().getEndPoint();
+
+						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
 					}
 				}
+				categoryIndex++;
 			}
 		}
-//		for (var product : products) {
-//			for (var result : product.getList()) {
-//				int normalizedAmount = (int) (result.getContribution().amount / maxCriteriaValue * 255);
-//				Point p1 = result.getStartPoint();
-//				var result2 = result.getTargetProductResult();
-//				if (result2 != null) {
-//					Point p2 = result2.getEndPoint();
-//					drawBezierCurve(gc, p1, p2, normalizedAmount);
-//				}
-//			}
-//		}
 	}
 
 	/**
@@ -364,7 +361,8 @@ public class ProductDisplay {
 	 * @param end   The ending point
 	 * @param alpha
 	 */
-	private void drawBezierCurve(GC gc, Point start, Point end, int alpha) {
+	private void drawBezierCurve(GC gc, Point start, Point end, RGB rgb) {
+		gc.setForeground(new Color(gc.getDevice(), rgb));
 		Path p = new Path(gc.getDevice());
 		p.moveTo(start.x, start.y);
 		int offset = 100;
@@ -372,6 +370,7 @@ public class ProductDisplay {
 		Point ctrlPoint2 = new Point(end.x - offset, end.y - offset);
 		p.cubicTo(ctrlPoint1.x, ctrlPoint1.y, ctrlPoint2.x, ctrlPoint2.y, end.x, end.y);
 		gc.drawPath(p);
+		gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
 	}
 
 	/**

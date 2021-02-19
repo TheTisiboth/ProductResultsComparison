@@ -37,8 +37,10 @@ public class App {
 		shell.setLayout(new GridLayout());
 		List<Product> products;
 		if (!config.useFakeResults) {
-			String dbNames[] = { "ecoinvent_371_apos_unit_20201221", "agribalyse_v3_0_1" };
-			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
+//			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104","exiobase3_monetary_20181212","needs_18","ideaolcaelemnames_final","evah_pigment_database_20190314","usda_1901009" };
+
+			String dbNames[] = { "exiobase3_monetary_20181212","needs_18" };
+//			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
 //			products = getContributionResults(dbNames, impactIndexes);
 			products = getHighestContributionResults(dbNames);
 		} else {

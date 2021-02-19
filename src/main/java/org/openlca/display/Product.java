@@ -2,6 +2,7 @@ package org.openlca.display;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
@@ -11,9 +12,18 @@ public class Product {
 
 	private ArrayList<Result> list;
 	private String name;
+	private boolean drawSeparation = false;
 
 	public Product() {
 		list = new ArrayList<>();
+	}
+
+	public void setDrawSeparation(boolean draw) {
+		drawSeparation = draw;
+	}
+
+	public boolean getDrawSeparation() {
+		return drawSeparation;
 	}
 
 	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
@@ -25,27 +35,35 @@ public class Product {
 	}
 
 	public double min(ComparisonCriteria criteria) {
-		switch (criteria) {
-		case AMOUNT:
-			return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
-		case CATEGORY:
-			return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
-		case LOCATION:
-			return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-					.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
+			case CATEGORY:
+				return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
+			case LOCATION:
+				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
 		}
 		return 0;
 	}
 
 	public double max(ComparisonCriteria criteria) {
-		switch (criteria) {
-		case AMOUNT:
-			return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
-		case CATEGORY:
-			return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
-		case LOCATION:
-			return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-					.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
+			case CATEGORY:
+				return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
+			case LOCATION:
+				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
 		}
 		return 0;
 	}
@@ -153,7 +171,4 @@ public class Product {
 		}
 	}
 
-	public void resetTargetProductResult() {
-		list.stream().forEach(r -> r.setTargetProductResult(null));
-	}
 }
