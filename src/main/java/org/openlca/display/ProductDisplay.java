@@ -307,7 +307,7 @@ public class ProductDisplay {
 					Category newCategory = new Category(resultIndex, rgb);
 					newCategory.setStartSeparation(sepStart, sepEnd);
 					previousCategory = newCategory;
-					if (resultIndex == products.get(productIndex).getList().size() - 1) {
+					if (resultIndex == products.get(productIndex).getEffectiveSize(comparisonCriteria) - 1) {
 						newCategory.setStartingResult(result);
 						newCategory.setStartSeparation(sepStart, sepEnd);
 						newCategory.setEndSeparation(sepStart, sepEnd);

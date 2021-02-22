@@ -33,6 +33,22 @@ public class Product {
 			list.add(new Result(c));
 		}
 	}
+	
+	public int getEffectiveSize(ComparisonCriteria criteria) {
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return (int) list.stream().filter(r -> r.getContribution().amount != 0.0).count();
+			case CATEGORY:
+				return (int) list.stream().filter(r -> r.getContribution().item.category != null).count();
+			case LOCATION:
+				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null).count();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
+		}
+		return 0;
+	}
 
 	public double min(ComparisonCriteria criteria) {
 		try {

@@ -44,7 +44,7 @@ public class App {
 //			products = getContributionResults(dbNames, impactIndexes);
 			products = getHighestContributionResults(dbNames);
 		} else {
-			products = createProducts(2, config);
+			products = createProducts(5, config);
 		}
 		new ProductDisplay(shell, products, config).display();
 		shell.open();
