@@ -37,14 +37,14 @@ public class App {
 		shell.setLayout(new GridLayout());
 		List<Product> products;
 		if (!config.useFakeResults) {
-//			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104","exiobase3_monetary_20181212","needs_18","ideaolcaelemnames_final","evah_pigment_database_20190314","usda_1901009" };
+			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104","exiobase3_monetary_20181212","needs_18","ideaolcaelemnames_final","evah_pigment_database_20190314","usda_1901009" };
 
-			String dbNames[] = { "exiobase3_monetary_20181212","needs_18" };
+//			String dbNames[] = { "exiobase3_monetary_20181212","needs_18" };
 //			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
 //			products = getContributionResults(dbNames, impactIndexes);
 			products = getHighestContributionResults(dbNames);
 		} else {
-			products = createProducts(10, config);
+			products = createProducts(2, config);
 		}
 		new ProductDisplay(shell, products, config).display();
 		shell.open();
@@ -110,22 +110,17 @@ public class App {
 
 	private static List<Product> createProducts(int productsAmount, Config config) {
 		// Create random numbers, in order to be the product results
-		List<String> results = new ArrayList<>();
 		Random rand = new Random();
-		for (int i = 0; i < config.NB_Product_Results; i++) {
-			results.add(String.valueOf(rand.nextLong()));
-		}
+
 		List<Product> products = new ArrayList<>();
 		for (int i = 0; i < productsAmount; i++) {
-			List<String> results2 = new ArrayList<>(results);
-			Collections.shuffle(results2);
 			List<Contribution<CategorizedDescriptor>> l = new ArrayList<>();
-			for (String string : results2) {
+			for (int j = 0; j < config.NB_Product_Results; j++) {
 				Contribution<CategorizedDescriptor> c = new Contribution<>();
 				var p = new ProcessDescriptor();
-				p.name = string;
+				p.name = String.valueOf(rand.nextInt()%10);
 				c.item = p;
-				c.amount = Double.valueOf(string);
+				c.amount = Double.valueOf(p.name);
 				l.add(c);
 			}
 			var p1 = new Product(l, "Product " + i);

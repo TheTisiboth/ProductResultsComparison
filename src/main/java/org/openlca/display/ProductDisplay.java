@@ -126,7 +126,6 @@ public class ProductDisplay {
 					for (int i = 0; i < categories.size(); i++) {
 						categories.set(i, new HashMap<>());
 					}
-//					categories.stream().forEach(m -> new HashMap<>());
 					sortProducts();
 					redraw();
 				}
@@ -200,7 +199,7 @@ public class ProductDisplay {
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x + 11, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
-		Point prevSubRectEdge = rectEdge; // Coordinate of each result rectangle
+		Point prevSubRectEdge = new Point(rectEdge.x, rectEdge.y + 1); // Coordinate of each result rectangle
 		Category previousCategory = null;
 		var pair = new Pair<>(prevSubRectEdge, previousCategory);
 		for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
@@ -256,25 +255,25 @@ public class ProductDisplay {
 			Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge, boolean drawSeparation,
 			Category previousCategory) {
 		// Draw a separator line between the current result, and the next one
-		Point sepStart = new Point(rectEdge.x + gap , rectEdge.y);
+		Point sepStart = new Point(rectEdge.x + gap, rectEdge.y + 1);
 		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight - 1);
 		boolean contributionEmpty = result.isContributionEmpty(comparisonCriteria);
 		RGB rgb = null;
 		if (!contributionEmpty) {
 			rgb = result.createColor(comparisonCriteria, minCriteriaValue, maxCriteriaValue);
 		}
-		if (drawSeparation && resultIndex != productResultsAmount - 1) {
+		if (drawSeparation) {
 			gc.drawLine(sepStart.x, sepStart.y, sepEnd.x, sepEnd.y);
 			if (contributionEmpty) {
 				gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
 			} else {
 				gc.setBackground(new Color(gc.getDevice(), rgb));
 			}
-			gc.fillRectangle(prevSubRectEdge.x + 1, prevSubRectEdge.y + 1, sepStart.x - prevSubRectEdge.x - 1,
+			gc.fillRectangle(prevSubRectEdge.x + 1, prevSubRectEdge.y, sepStart.x - prevSubRectEdge.x - 1,
 					productHeight - 1);
 
 			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-		} else if (!drawSeparation && resultIndex != productResultsAmount - 1) {
+		} else if (resultIndex != productResultsAmount - 1) {
 
 			if (contributionEmpty) {
 				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_GRAY));
@@ -290,8 +289,9 @@ public class ProductDisplay {
 		if (!contributionEmpty) {
 			if (previousCategory == null) {
 				previousCategory = new Category(resultIndex, rgb);
+				previousCategory.setStartSeparation(sepStart, sepEnd);
 			} else {
-				if (previousCategory.getRgb() != rgb) {
+				if (!previousCategory.getRgb().equals(rgb)) {
 					// We are in a new category
 					previousCategory.setEndIndex(resultIndex - 1);
 					int resultIndex1 = 0;
@@ -305,7 +305,15 @@ public class ProductDisplay {
 					previousCategory.setEndSeparation(sepStart, sepEnd);
 					categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
 					Category newCategory = new Category(resultIndex, rgb);
+					newCategory.setStartSeparation(sepStart, sepEnd);
 					previousCategory = newCategory;
+					if (resultIndex == products.get(productIndex).getList().size() - 1) {
+						newCategory.setStartingResult(result);
+						newCategory.setStartSeparation(sepStart, sepEnd);
+						newCategory.setEndSeparation(sepStart, sepEnd);
+						newCategory.setEndIndex(resultIndex);
+						categories.get(productIndex).put(newCategory.getRgb(), newCategory);
+					}
 				}
 			}
 		}
@@ -328,14 +336,17 @@ public class ProductDisplay {
 			System.out.println("Product " + productIndex + " : " + categories.get(productIndex).size() + " categories");
 
 			var map = categories.get(productIndex);
-			var categoryIndex = 0;
 			for (Map.Entry<RGB, Category> entry : map.entrySet()) {
 				var c1 = entry.getValue();
-				if (categoryIndex < map.entrySet().size() - 1 && !products.get(productIndex).getDrawSeparation()) {
-					var sepEnd = c1.getEndSeparation();
-					gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-					gc.drawLine(sepEnd.first.x, sepEnd.first.y, sepEnd.second.x, sepEnd.second.y);
-					gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+				System.out.println("    " + c1.getRgb());
+				System.out.println("    " + c1.getStartIndex() + " to " + c1.getEndIndex());
+				if (!products.get(productIndex).getDrawSeparation()) {
+					if (c1.isSeparationDrawable()) {
+						var sepEnd = c1.getEndSeparation();
+						gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+						gc.drawLine(sepEnd.first.x, sepEnd.first.y, sepEnd.second.x, sepEnd.second.y);
+						gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_BLACK));
+					}
 				}
 				if (productIndex < categories.size() - 1) {
 					var nextMap = categories.get(productIndex + 1);
@@ -348,7 +359,6 @@ public class ProductDisplay {
 						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
 					}
 				}
-				categoryIndex++;
 			}
 		}
 	}

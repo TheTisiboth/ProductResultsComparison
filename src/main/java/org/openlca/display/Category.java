@@ -11,18 +11,35 @@ public class Category {
 	private RGB rgb;
 	private Result startingResult;
 	private Result endingResult;
-	private Pair<Point,Point> endSeparation;
-	
+	private Pair<Point, Point> endSeparation;
+	private Pair<Point, Point> startSeparation;
+
 	public Category(int si, RGB r) {
 		startIndex = si;
 		rgb = r;
 	}
-	
+
+	public void setStartSeparation(Point sepStart, Point sepEnd) {
+		startSeparation = new Pair<Point, Point>(sepStart, sepEnd);
+	}
+
+	public Pair<Point, Point> getStartSeparation() {
+		return startSeparation;
+	}
+
 	public void setEndSeparation(Point sepStart, Point sepEnd) {
 		endSeparation = new Pair<Point, Point>(sepStart, sepEnd);
 	}
-	
-	public Pair<Point,Point> getEndSeparation() {
+
+	public boolean isSeparationDrawable() {
+		if(endSeparation == null || startSeparation == null) {
+			System.out.println(1);
+			return false;
+		}
+		return (endSeparation.first.x - startSeparation.first.x >= 3);
+	}
+
+	public Pair<Point, Point> getEndSeparation() {
 		return endSeparation;
 	}
 
@@ -65,5 +82,5 @@ public class Category {
 	public void setEndingResult(Result endingPoint) {
 		this.endingResult = endingPoint;
 	}
-	
+
 }
