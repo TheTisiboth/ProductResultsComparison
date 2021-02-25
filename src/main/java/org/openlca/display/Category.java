@@ -9,14 +9,31 @@ public class Category {
 	private int startIndex;
 	private int endIndex;
 	private RGB rgb;
-	private Result startingResult;
-	private Result endingResult;
+	private Result targetResult;
 	private Pair<Point, Point> endSeparation;
 	private Pair<Point, Point> startSeparation;
+	private Product product;
 
-	public Category(int si, RGB r) {
+	public Category(int si, RGB r, Product p) {
 		startIndex = si;
 		rgb = r;
+		product = p;
+	}
+
+	public RGB getRgb() {
+		return rgb;
+	}
+
+	public void setRgb(RGB rgb) {
+		this.rgb = rgb;
+	}
+
+	public Result getTargetResult() {
+		return targetResult;
+	}
+
+	public void setStartingResult(Result targetResult) {
+		this.targetResult = targetResult;
 	}
 
 	public void setStartSeparation(Point sepStart, Point sepEnd) {
@@ -32,7 +49,7 @@ public class Category {
 	}
 
 	public boolean isSeparationDrawable() {
-		if(endSeparation == null || startSeparation == null) {
+		if (endSeparation == null || startSeparation == null) {
 			System.out.println(1);
 			return false;
 		}
@@ -55,32 +72,26 @@ public class Category {
 		return endIndex;
 	}
 
+	/**
+	 * Set the index of the last result of the category. This has to be made AFTER
+	 * the start index has been set
+	 * 
+	 * @param endIndex
+	 */
 	public void setEndIndex(int endIndex) {
 		this.endIndex = endIndex;
+		int resultIndex = 0;
+		// We look for the result in the middle of the category
+		if (endIndex != startIndex) {
+			resultIndex = (startIndex + endIndex) / 2;
+		} else {
+			resultIndex = startIndex;
+		}
+		targetResult = product.getList().get(resultIndex);
 	}
 
-	public RGB getRgb() {
-		return rgb;
-	}
-
-	public void setRgb(RGB rgb) {
-		this.rgb = rgb;
-	}
-
-	public Result getStartingResult() {
-		return startingResult;
-	}
-
-	public void setStartingResult(Result startingResult) {
-		this.startingResult = startingResult;
-	}
-
-	public Result getEndingResult() {
-		return endingResult;
-	}
-
-	public void setEndingResult(Result endingPoint) {
-		this.endingResult = endingPoint;
+	public String toString() {
+		return rgb + " " + startIndex + " - " + endIndex;
 	}
 
 }

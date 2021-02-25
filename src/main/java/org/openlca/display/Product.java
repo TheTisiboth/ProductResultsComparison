@@ -12,76 +12,33 @@ public class Product {
 
 	private ArrayList<Result> list;
 	private String name;
-	private boolean drawSeparation = false;
+	private boolean drawSeparationBetweenResults = false;
+	static ComparisonCriteria criteria;
 
-	public Product() {
+	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
-	}
-
-	public void setDrawSeparation(boolean draw) {
-		drawSeparation = draw;
-	}
-
-	public boolean getDrawSeparation() {
-		return drawSeparation;
 	}
 
 	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
 		name = n;
 		list = new ArrayList<>();
-		for (Contribution<CategorizedDescriptor> c : l) {
-			list.add(new Result(c));
+		Result.criteria = criteria;
+		for (Contribution<CategorizedDescriptor> contribution : l) {
+			list.add(new Result(contribution));
 		}
-	}
-	
-	public int getEffectiveSize(ComparisonCriteria criteria) {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return (int) list.stream().filter(r -> r.getContribution().amount != 0.0).count();
-			case CATEGORY:
-				return (int) list.stream().filter(r -> r.getContribution().item.category != null).count();
-			case LOCATION:
-				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null).count();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
 	}
 
-	public double min(ComparisonCriteria criteria) {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
-			case CATEGORY:
-				return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
-			case LOCATION:
-				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
+	public static void updateComparisonCriteria(ComparisonCriteria c) {
+		criteria = c;
+		Result.criteria = c;
 	}
 
-	public double max(ComparisonCriteria criteria) {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
-			case CATEGORY:
-				return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
-			case LOCATION:
-				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
+	public void setDrawSeparationBetweenResults(boolean draw) {
+		drawSeparationBetweenResults = draw;
+	}
+
+	public boolean getDrawSeparationBetweenResults() {
+		return drawSeparationBetweenResults;
 	}
 
 	public String getName() {
@@ -104,6 +61,62 @@ public class Product {
 		return list.get(index);
 	}
 
+	/**
+	 * Return the size of the product list, without counting the 0 or null values
+	 * 
+	 * @return The effective size of this product
+	 */
+	public int getEffectiveSize() {
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return (int) list.stream().filter(r -> r.getContribution().amount != 0.0).count();
+			case CATEGORY:
+				return (int) list.stream().filter(r -> r.getContribution().item.category != null).count();
+			case LOCATION:
+				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+						.count();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
+		}
+		return 0;
+	}
+
+	public double min() {
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
+			case CATEGORY:
+				return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
+			case LOCATION:
+				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
+		}
+		return 0;
+	}
+
+	public double max() {
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
+			case CATEGORY:
+				return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
+			case LOCATION:
+				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
+			}
+		} catch (NullPointerException | NoSuchElementException e) {
+			return 0;
+		}
+		return 0;
+	}
+
 	@Override
 	public String toString() {
 		String s = "[ ";
@@ -114,7 +127,7 @@ public class Product {
 		return s;
 	}
 
-	public void sort(ComparisonCriteria criteria) {
+	public void sort() {
 		switch (criteria) {
 		case AMOUNT:
 			list.sort((r1, r2) -> {

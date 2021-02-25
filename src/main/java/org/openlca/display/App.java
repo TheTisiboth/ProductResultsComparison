@@ -37,12 +37,13 @@ public class App {
 		shell.setLayout(new GridLayout());
 		List<Product> products;
 		if (!config.useFakeResults) {
-			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104","exiobase3_monetary_20181212","needs_18","ideaolcaelemnames_final","evah_pigment_database_20190314","usda_1901009" };
+//			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104", "exiobase3_monetary_20181212", "needs_18",
+//					"ideaolcaelemnames_final", "evah_pigment_database_20190314", "usda_1901009" };
 
-//			String dbNames[] = { "exiobase3_monetary_20181212","needs_18" };
-//			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
-//			products = getContributionResults(dbNames, impactIndexes);
-			products = getHighestContributionResults(dbNames);
+			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104" };
+			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
+			products = getContributionResults(dbNames, impactIndexes, config);
+//			products = getHighestContributionResults(dbNames, config);
 		} else {
 			products = createProducts(5, config);
 		}
@@ -57,9 +58,10 @@ public class App {
 
 	}
 
-	private static List<Product> getHighestContributionResults(String dbNames[]) {
+	private static List<Product> getHighestContributionResults(String dbNames[], Config config) {
 		var list = new ArrayList<Product>();
 		println("Connect to databases ");
+		Product.criteria = config.comparisonCriteria;
 		for (String dbName : dbNames) {
 			try (var db = DerbyDatabase.fromDataDir(dbName)) {
 				var techIndex = TechIndex.unlinkedOf(db);
@@ -87,9 +89,10 @@ public class App {
 		return list;
 	}
 
-	private static List<Product> getContributionResults(String dbNames[], int impactIndexes[]) {
+	private static List<Product> getContributionResults(String dbNames[], int impactIndexes[], Config config) {
 		var list = new ArrayList<Product>();
 		println("Connect to databases ");
+		Product.criteria = config.comparisonCriteria;
 		for (String dbName : dbNames) {
 			try (var db = DerbyDatabase.fromDataDir(dbName)) {
 				var techIndex = TechIndex.unlinkedOf(db);
@@ -113,12 +116,13 @@ public class App {
 		Random rand = new Random();
 
 		List<Product> products = new ArrayList<>();
+		Product.criteria = config.comparisonCriteria;
 		for (int i = 0; i < productsAmount; i++) {
 			List<Contribution<CategorizedDescriptor>> l = new ArrayList<>();
 			for (int j = 0; j < config.NB_Product_Results; j++) {
 				Contribution<CategorizedDescriptor> c = new Contribution<>();
 				var p = new ProcessDescriptor();
-				p.name = String.valueOf(rand.nextInt()%10);
+				p.name = String.valueOf(rand.nextInt() % 10);
 				c.item = p;
 				c.amount = Double.valueOf(p.name);
 				l.add(c);

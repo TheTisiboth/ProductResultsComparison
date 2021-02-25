@@ -12,6 +12,7 @@ public class Result {
 	private Point startPoint; // Point from which a links start
 	private Point endPoint; // Point to which the links ends
 	private RGB rgb;
+	static ComparisonCriteria criteria;
 
 	public Result(Contribution<CategorizedDescriptor> item) {
 		contribution = item;
@@ -19,21 +20,36 @@ public class Result {
 		endPoint = null;
 	}
 
-	public RGB createColor(ComparisonCriteria criteria, double min, double max) {
+	public RGB getRGB(double min, double max) {
 		double percentage = 0;
 		switch (criteria) {
 		case AMOUNT:
-			percentage = ((contribution.amount - min) * 100) / (max - min);
+			if (contribution.amount != 0.0) {
+				percentage = ((contribution.amount - min) * 100) / (max - min);
+			} else {
+				percentage = -1;
+			}
 			break;
 		case CATEGORY:
-			percentage = ((contribution.item.category - min) * 100) / (max - min);
+			if (contribution.item.category != null) {
+				percentage = ((contribution.item.category - min) * 100) / (max - min);
+			} else {
+				percentage = -1;
+			}
 			break;
 		case LOCATION:
-			percentage = (((ProcessDescriptor) contribution.item).location * 100) / (max - min);
+			Long location = ((ProcessDescriptor) contribution.item).location;
+			if (location != null) {
+				percentage = (location.longValue() * 100) / (max - min);
+			} else {
+				percentage = -1;
+			}
 			break;
 		}
 		if (percentage > 100.0) { // It happens because of uncertainty of division
 			percentage = 100.0;
+		} else if (percentage == -1) {
+			return new RGB(192, 192, 192); // Grey color for unfocused values (0 or null)
 		}
 		java.awt.Color tmpColor = ColorHelper.numberToColor((double) percentage);
 		rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());
@@ -63,10 +79,10 @@ public class Result {
 	public Point getEndPoint() {
 		return endPoint;
 	}
-	
-	public boolean isContributionEmpty( ComparisonCriteria comparisonCriteria) {
+
+	public boolean isContributionEmpty() {
 		boolean contributionEmpty = false;
-		switch (comparisonCriteria) {
+		switch (criteria) {
 		case AMOUNT:
 			contributionEmpty = contribution.amount == 0.0;
 			break;
@@ -85,7 +101,8 @@ public class Result {
 		return contribution.item.toString();
 	}
 
-	public boolean equals(Object o, ComparisonCriteria criteria) {
+	@Override
+	public boolean equals(Object o) {
 		if (o == this) {
 			return true;
 		}
