@@ -20,6 +20,22 @@ public class Result {
 		endPoint = null;
 	}
 
+	public double getValue() {
+		switch (criteria) {
+		case AMOUNT:
+			return contribution.amount;
+		case CATEGORY:
+			return contribution.item.category;
+		case LOCATION:
+			try {
+				return ((ProcessDescriptor) contribution.item).location;
+			} catch (ClassCastException e) {
+				return 0;
+			}
+		}
+		return 0;
+	}
+
 	public RGB getRGB(double min, double max) {
 		double percentage = 0;
 		switch (criteria) {

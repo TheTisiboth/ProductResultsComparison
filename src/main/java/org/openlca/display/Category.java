@@ -50,7 +50,6 @@ public class Category {
 
 	public boolean isSeparationDrawable() {
 		if (endSeparation == null || startSeparation == null) {
-			System.out.println(1);
 			return false;
 		}
 		return (endSeparation.first.x - startSeparation.first.x >= 3);
@@ -91,7 +90,7 @@ public class Category {
 	}
 
 	public String toString() {
-		return rgb + " " + startIndex + " - " + endIndex;
+		return rgb + " / " + startIndex + " - " + endIndex;
 	}
 
 }

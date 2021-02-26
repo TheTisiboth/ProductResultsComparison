@@ -94,7 +94,7 @@ public class ProductDisplay {
 		/**
 		 * VBar component
 		 */
-		ScrollBar vBar = canvas.getVerticalBar();
+		var vBar = canvas.getVerticalBar();
 		vBar.setMaximum(theoreticalScreenHeight);
 		vBar.setMinimum(0);
 
@@ -102,8 +102,8 @@ public class ProductDisplay {
 		addResizeEvent(composite, canvas, vBar);
 
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(); //
-		addPaintListener(composite, canvas); // Once finished, we really paint the cache
+		cachedPaint(); // Costly painting method, so we cache it first
+		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 	}
 
 	/**
@@ -133,17 +133,18 @@ public class ProductDisplay {
 		});
 	}
 
+	/**
+	 * Sort products by descending amount, according to the comparison criteria
+	 */
 	private void sortProducts() {
-		// Sort by descending amount
 		Product.updateComparisonCriteria(comparisonCriteria);
 		products.stream().forEach(p -> p.sort());
 		maxCriteriaValue = products.stream().mapToDouble(p -> p.max()).max().getAsDouble();
 		minCriteriaValue = products.stream().mapToDouble(p -> p.min()).min().getAsDouble();
-		System.out.println();
 	}
 
 	/**
-	 * Allow to redraw everything
+	 * Redraw everything
 	 */
 	private void redraw() {
 		screenSize = composite.getSize();
@@ -275,6 +276,7 @@ public class ProductDisplay {
 			gc.fillRectangle(prevSubRectEdge.x + 1, prevSubRectEdge.y, sepStart.x - prevSubRectEdge.x - 1,
 					productHeight - 1);
 			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+			System.out.println("fill");
 		} else if (resultIndex != productResultsAmount - 1) {
 			drawLine(gc, sepStart, sepEnd, rgb, SWT.COLOR_BLACK);
 		}
@@ -337,22 +339,26 @@ public class ProductDisplay {
 	 * @param e The Paint Event
 	 */
 	private void drawLinks(GC gc) {
-		for (int productIndex = 0; productIndex < categories.size() - 1; productIndex++) {
+		for (int productIndex = 0; productIndex < categories.size(); productIndex++) {
 			var map = categories.get(productIndex);
+			System.out.println("Product " + productIndex + " : " + map.size() + " categories");
 			for (Map.Entry<RGB, Category> entry : map.entrySet()) {
 				var startCategory = entry.getValue();
+				System.out.println(startCategory);
 				if (!products.get(productIndex).getDrawSeparationBetweenResults()) {
 					if (startCategory.isSeparationDrawable()) {
 						var sepEnd = startCategory.getEndSeparation();
 						drawLine(gc, sepEnd.first, sepEnd.second, SWT.COLOR_WHITE, SWT.COLOR_BLACK);
 					}
 				}
-				var nextMap = categories.get(productIndex + 1);
-				var linkedCategory = nextMap.get(entry.getKey());
-				if (linkedCategory != null) {
-					var startPoint = startCategory.getTargetResult().getStartPoint();
-					var endPoint = linkedCategory.getTargetResult().getEndPoint();
-					drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
+				if (productIndex < categories.size() - 1) {
+					var nextMap = categories.get(productIndex + 1);
+					var linkedCategory = nextMap.get(entry.getKey());
+					if (linkedCategory != null) {
+						var startPoint = startCategory.getTargetResult().getStartPoint();
+						var endPoint = linkedCategory.getTargetResult().getEndPoint();
+						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
+					}
 				}
 			}
 		}
@@ -424,17 +430,16 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Add a paint listener to the canvas
+	 * Add a paint listener to the canvas. This is called whenever the canvas needs
+	 * to be redrawed, then it draws the cached image
 	 * 
-	 * @param composite Parent composent of the canvas
+	 * @param composite Parent component of the canvas
 	 * @param canvas    A Canvas component
 	 */
-	private void addPaintListener(Composite composite, Canvas canvas) {
+	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				screenSize = composite.getSize(); // Responsive behavior
 				e.gc.drawImage(cache, origin.x, origin.y);
-				System.out.println(1);
 			}
 		});
 	}
