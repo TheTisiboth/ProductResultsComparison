@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import org.eclipse.swt.graphics.Point;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
@@ -14,6 +15,8 @@ public class Product {
 	private String name;
 	private boolean drawSeparationBetweenResults = false;
 	static ComparisonCriteria criteria;
+	private double width;
+	private Point startEdge;
 
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
@@ -198,6 +201,19 @@ public class Product {
 		default:
 			throw new IllegalArgumentException("Unexpected value: " + criteria);
 		}
+	}
+
+	public void setBounds(Point startEdge, int productWidth) {
+		width = productWidth;
+		this.startEdge = startEdge;
+	}
+
+	public double getWidth() {
+		return width;
+	}
+
+	public Point getStartEdge() {
+		return startEdge;
 	}
 
 }

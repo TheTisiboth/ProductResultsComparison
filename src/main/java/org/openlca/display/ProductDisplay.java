@@ -1,9 +1,11 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
@@ -66,9 +68,6 @@ public class ProductDisplay {
 		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
 		categories = new ArrayList<>();
-		for (int i = 0; i < products.size(); i++) {
-			categories.add(new HashMap<RGB, Category>());
-		}
 		sortProducts();
 	}
 
@@ -123,9 +122,7 @@ public class ProductDisplay {
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 					origin = new Point(0, 0);
 					// We reset the categories
-					for (int i = 0; i < categories.size(); i++) {
-						categories.set(i, new HashMap<>());
-					}
+					categories = new ArrayList<Map<RGB, Category>>();
 					sortProducts();
 					redraw();
 				}
@@ -165,13 +162,14 @@ public class ProductDisplay {
 	 */
 	private void cachedPaint() {
 		GC gc = new GC(cache);
+		categories = new ArrayList<Map<RGB, Category>>();
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
-		Point rectEdge = new Point(origin.x + xMargin, origin.y + xMargin);
+		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
 			handleProduct(gc, maxProductWidth, rectEdge, productIndex);
-			rectEdge.y += 300;
+			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
 	}
@@ -190,124 +188,50 @@ public class ProductDisplay {
 		final int productResultsAmount = p.getList().size();
 //		int productWidth = (int) (((double) productResultsAmount / (double) maxProductResultsAmout) * maxProductWidth);
 		int productWidth = (int) maxProductWidth;
-		// It is the gap between two results
-		double gap = ((double) productWidth / productResultsAmount);
-		int chunk = -1, chunkSize = 0;
-		boolean drawSeparation = true;
-		if (gap < 3.0) {
-			// If the gap is to small, we put a certain amount of results in the same
-			// chunk
-			chunkSize = (int) Math.ceil(1 / gap);
-			drawSeparation = false;
-			productWidth = (int) (productResultsAmount / chunkSize);
-		} else {
-			productWidth = (int) gap * productResultsAmount;
-		}
-		p.setDrawSeparationBetweenResults(drawSeparation);
+
+		p.setBounds(rectEdge, productWidth);
 		// Draw a rectangle for each product
-		gc.drawRectangle(rectEdge.x, rectEdge.y, (int) productWidth, productHeight);
+		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
-		Point prevSubRectEdge = new Point(rectEdge.x, rectEdge.y + 1); // Coordinate of each result rectangle
-		Category previousCategory = null;
-		var pair = new Pair<>(prevSubRectEdge, previousCategory);
-		for (int resultIndex = 0; resultIndex < productResultsAmount; resultIndex++) {
-			chunk = computeChunk(gap, chunk, chunkSize, drawSeparation, resultIndex);
-			var result = p.getResult(resultIndex);
-			pair = handleResult(gc, productIndex, productResultsAmount, pair.first, resultIndex, result, chunk,
-					rectEdge, drawSeparation, pair.second);
-		}
-	}
+		Map<RGB, Category> categoryMap = p.getList().stream().map(r -> r.getValue()).distinct()
+				.map(v -> new Category(v, p, minCriteriaValue, maxCriteriaValue))
+				.collect(Collectors.toMap(k -> ((Category) k).getRgb(), v -> v, (e1, e2) -> e1, LinkedHashMap::new));
 
-	/**
-	 * Compute the new chunk value, which will indicate the position of the current
-	 * result
-	 * 
-	 * @param gap            The gap between 2 results
-	 * @param chunk          The value of the current chunk
-	 * @param chunkSize      The size of the chunks
-	 * @param drawSeparation Indicate if we have to draw a separation line between
-	 *                       the results
-	 * @param resultIndex    The index result
-	 * @return The new chunk value
-	 */
-	private int computeChunk(double gap, int chunk, int chunkSize, boolean drawSeparation, int resultIndex) {
-		if (!drawSeparation) {
-			// Every chunkSize, we increment the chunk
-			var newChunk = (resultIndex % (int) chunkSize) == 0;
-			if (newChunk == true) {
-				chunk++;
+		System.out.println("Product " + productIndex + " : " + categoryMap.size() + " categories");
+		double resultsSum = categoryMap.entrySet().stream().mapToDouble(c -> Math.abs(c.getValue().getValue())).sum();
+		Point start = null;
+		for (Entry<RGB, Category> entry : categoryMap.entrySet()) {
+			var startCategory = entry.getValue();
+
+			if (start == null) {
+				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
-		} else {
-			chunk = (int) gap * (resultIndex + 1);
-		}
-		return chunk;
-	}
-
-	/**
-	 * Handle the current result. Draw a separation line between it and the next
-	 * result, display its value, and find a matching result in the next product
-	 * 
-	 * @param e                    The Paint Event
-	 * @param productIndex         Index of the current product
-	 * @param productResultsAmount Amount of results for the current product
-	 * @param prevSubRectEdge      Separation with the previous result
-	 * @param resultIndex          The index result
-	 * @param result               THe current result
-	 * @param gap                  Gap between 2 products
-	 * @param rectEdge             Position of product rectangle
-	 * @param drawSeparation
-	 * @param previousRGB
-	 * @return
-	 */
-	private Pair<Point, Category> handleResult(GC gc, int productIndex, final int productResultsAmount,
-			Point prevSubRectEdge, int resultIndex, Result result, int gap, Point rectEdge, boolean drawSeparation,
-			Category previousCategory) {
-		// Draw a separator line between the current result, and the next one
-		Point sepStart = new Point(rectEdge.x + gap, rectEdge.y + 1);
-		Point sepEnd = new Point(sepStart.x, rectEdge.y + productHeight - 1);
-		boolean contributionEmpty = result.isContributionEmpty();
-		RGB rgb = null;
-		rgb = result.getRGB(minCriteriaValue, maxCriteriaValue);
-		if (drawSeparation) {
-			drawLine(gc, sepStart, sepEnd, null, null);
-			gc.setBackground(new Color(gc.getDevice(), rgb));
-			gc.fillRectangle(prevSubRectEdge.x + 1, prevSubRectEdge.y, sepStart.x - prevSubRectEdge.x - 1,
-					productHeight - 1);
-			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-			System.out.println("fill");
-		} else if (resultIndex != productResultsAmount - 1) {
-			drawLine(gc, sepStart, sepEnd, rgb, SWT.COLOR_BLACK);
-		}
-		if (!contributionEmpty) {
-			if (previousCategory == null) {
-				previousCategory = new Category(resultIndex, rgb, products.get(productIndex));
-				previousCategory.setStartSeparation(sepStart, sepEnd);
+			var value = startCategory.getValue();
+			int categoryWidth = 0;
+			if (value == 0.0) {
+				categoryWidth = (int) (productWidth - start.x);
 			} else {
-				if (!previousCategory.getRgb().equals(rgb)) {
-					// We are in a new category
-					previousCategory.setEndIndex(resultIndex - 1);
-					previousCategory.setEndSeparation(sepStart, sepEnd);
-					categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
-					Category newCategory = new Category(resultIndex, rgb, products.get(productIndex));
-					newCategory.setStartSeparation(sepStart, sepEnd);
-					previousCategory = newCategory;
-				}
-				if (resultIndex == products.get(productIndex).getEffectiveSize() - 1) {
-					previousCategory.setEndIndex(resultIndex);
-					previousCategory.setEndSeparation(sepStart, sepEnd);
-					categories.get(productIndex).put(previousCategory.getRgb(), previousCategory);
-				}
+				var percentage = value / resultsSum;
+				categoryWidth = (int) (productWidth * percentage);
 			}
+			gc.setBackground(new Color(gc.getDevice(), startCategory.getRgb()));
+			gc.fillRectangle(start.x , start.y, categoryWidth, productHeight - 1);
+			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+			var end = new Point(start.x + categoryWidth + 1, start.y);
+			var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
+			var endingPoint = new Point(startingPoint.x, start.y-2);
+			startCategory.setTargetStartingPoint(startingPoint);
+			startCategory.setTargetEndingPoint(endingPoint);
+			startCategory.setStartPixel(start.x);
+			startCategory.setEndPixel(end.x);
+			start = end;
+			drawLine(gc, start, new Point(start.x, start.y + productHeight - 2), SWT.COLOR_WHITE, SWT.COLOR_BLACK);
+			System.out.println(startCategory);
+
 		}
-		if (config.displayResultValue) {
-			Point textPos = new Point(prevSubRectEdge.x + 10, (sepEnd.y + sepStart.y) / 2 - 10);
-			gc.drawText(result.toString(), textPos.x, textPos.y);
-		}
-		result.setStartPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepEnd.y + 2);
-		result.setEndPoint((prevSubRectEdge.x + sepEnd.x) / 2, sepStart.y - 2);
-		return new Pair<Point, Category>(sepStart, previousCategory);
+		categories.add(categoryMap);
 	}
 
 	/**
@@ -339,29 +263,21 @@ public class ProductDisplay {
 	 * @param e The Paint Event
 	 */
 	private void drawLinks(GC gc) {
-		for (int productIndex = 0; productIndex < categories.size(); productIndex++) {
-			var map = categories.get(productIndex);
-			System.out.println("Product " + productIndex + " : " + map.size() + " categories");
-			for (Map.Entry<RGB, Category> entry : map.entrySet()) {
-				var startCategory = entry.getValue();
-				System.out.println(startCategory);
-				if (!products.get(productIndex).getDrawSeparationBetweenResults()) {
-					if (startCategory.isSeparationDrawable()) {
-						var sepEnd = startCategory.getEndSeparation();
-						drawLine(gc, sepEnd.first, sepEnd.second, SWT.COLOR_WHITE, SWT.COLOR_BLACK);
-					}
-				}
-				if (productIndex < categories.size() - 1) {
+		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
+			var categoryMap = categories.get(productIndex);
+			for (Entry<RGB, Category> entry : categoryMap.entrySet()) {
+				if (entry.getValue().isLinkDrawable()) {
 					var nextMap = categories.get(productIndex + 1);
 					var linkedCategory = nextMap.get(entry.getKey());
 					if (linkedCategory != null) {
-						var startPoint = startCategory.getTargetResult().getStartPoint();
-						var endPoint = linkedCategory.getTargetResult().getEndPoint();
+						var startPoint = entry.getValue().getTargetStartingPoint();
+						var endPoint = linkedCategory.getTargetEndingPoint();
 						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
 					}
 				}
 			}
 		}
+
 	}
 
 	/**
