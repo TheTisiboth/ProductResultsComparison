@@ -23,11 +23,14 @@ import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowLayout;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Canvas;
+import org.eclipse.swt.widgets.ColorDialog;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
@@ -49,8 +52,9 @@ public class ProductDisplay {
 	private Composite composite;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
-	private List<Map<RGB, Category>> categories;
+	private List<List<Category>> categoriesList;
 	private Combo categoriesValuesSelection;
+	private Color chosenColor;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -68,7 +72,7 @@ public class ProductDisplay {
 		maxCriteriaValue = 0;
 		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
-		categories = new ArrayList<>();
+		categoriesList = new ArrayList<>();
 		sortProducts();
 	}
 
@@ -108,7 +112,45 @@ public class ProductDisplay {
 		composite1.setLayout(new RowLayout());
 		createComparisonCriteriaCombo(composite1);
 		createSelectValueCombo(composite1);
+		createColorPicker(composite1);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
+	}
+
+	private void createColorPicker(Composite composite) {
+		// Start with Celtics green
+		chosenColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
+
+		// Use a label full of spaces to show the color
+		final Label colorLabel = new Label(composite, SWT.NONE);
+		colorLabel.setText("    ");
+		colorLabel.setBackground(chosenColor);
+
+		Button button = new Button(composite, SWT.PUSH);
+		button.setText("Color...");
+		button.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent event) {
+				// Create the color-change dialog
+				ColorDialog dlg = new ColorDialog(shell);
+
+				// Set the selected color in the dialog from
+				// user's selected color
+				dlg.setRGB(colorLabel.getBackground().getRGB());
+
+				// Change the title bar text
+				dlg.setText("Choose a Color");
+
+				// Open the dialog and retrieve the selected color
+				RGB rgb = dlg.open();
+				if (rgb != null) {
+					// Dispose the old color, create the
+					// new one, and set into the label
+					chosenColor.dispose();
+					chosenColor = new Color(composite.getDisplay(), rgb);
+					colorLabel.setBackground(chosenColor);
+					triggerSelectValueComboSelectionListener(false);
+				}
+			}
+		});
 	}
 
 	/**
@@ -128,22 +170,24 @@ public class ProductDisplay {
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 					origin = new Point(0, 0);
 					// We reset the categories
-					categories = new ArrayList<Map<RGB, Category>>();
+					categoriesList = new ArrayList<>();
 					sortProducts();
 					redraw(true);
-					triggerSelectValueComboSelectionListener();
+					triggerSelectValueComboSelectionListener(true);
 				}
 			}
-
-			private void triggerSelectValueComboSelectionListener() {
-				categoriesValuesSelection.deselectAll();
-				Event event = new Event();
-				event.widget = categoriesValuesSelection;
-				event.display = categoriesValuesSelection.getDisplay();
-				event.type = SWT.Selection;
-				categoriesValuesSelection.notifyListeners(SWT.Selection, event);
-			}
 		});
+	}
+
+	private void triggerSelectValueComboSelectionListener(boolean deselect) {
+		if (deselect) {
+			categoriesValuesSelection.deselectAll();
+		}
+		Event event = new Event();
+		event.widget = categoriesValuesSelection;
+		event.display = categoriesValuesSelection.getDisplay();
+		event.type = SWT.Selection;
+		categoriesValuesSelection.notifyListeners(SWT.Selection, event);
 	}
 
 	/**
@@ -153,40 +197,29 @@ public class ProductDisplay {
 		categoriesValuesSelection = new Combo(composite, SWT.READ_ONLY);
 		categoriesValuesSelection.setBounds(30, 50, 150, 65);
 		// Get the whole dinstinct categories values
-		String[] categoriesValues = categories.stream()
-				.flatMap(categories -> categories.entrySet().stream()
-						.map(entry -> entry.getValue().getTargetValue() + ""))
-				.distinct().sorted().collect(Collectors.toList()).toArray(String[]::new);
+		String[] categoriesValues = categoriesList.stream()
+				.flatMap(categories -> categories.stream().map(entry -> entry.getTargetValue() + "")).distinct()
+				.sorted().collect(Collectors.toList()).toArray(String[]::new);
 		categoriesValuesSelection.setItems(categoriesValues);
 		categoriesValuesSelection.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if (categoriesValuesSelection.getText().equals("")) {
 					// Get the whole dinstinct categories values
-					String[] categoriesValues = categories.stream()
-							.flatMap(categories -> categories.entrySet().stream()
-									.map(entry -> entry.getValue().getTargetValue() + ""))
+					String[] categoriesValues = categoriesList.stream()
+							.flatMap(categories -> categories.stream().map(entry -> entry.getTargetValue() + ""))
 							.distinct().sorted().collect(Collectors.toList()).toArray(String[]::new);
 					categoriesValuesSelection.setItems(categoriesValues);
 				} else {
-					String selectedValue = categoriesValuesSelection.getText();
-					RGB rgb = new RGB(0, 0, 0);
+					double selectedValue = Double.valueOf(categoriesValuesSelection.getText()).doubleValue();
+					RGB rgb = chosenColor.getRGB();
 					// Reset categories colors to default
-					categories.stream().forEach(
-							c -> c.entrySet().stream().filter(entry -> entry.getKey().equals(rgb)).forEach((entry) -> {
-								var cat = entry.getValue();
-								cat.resetDefaultRGB();
-								c.remove(entry.getKey());
-								c.put(cat.getRgb(), cat);
-							}));
+					categoriesList.stream().forEach(categories -> categories.stream()
+							.filter(entry -> entry.getRgb().equals(rgb)).forEach(entry -> entry.resetDefaultRGB()));
 					// Set a black color the the chosen categories
-					categories.stream()
-							.forEach(c -> c.entrySet().stream().filter(
-									entry -> Double.toString(entry.getValue().getTargetValue()).equals(selectedValue))
-									.forEach((entry) -> {
-										entry.getValue().setRgb(rgb);
-										c.put(rgb, entry.getValue());
-										c.remove(entry.getKey());
-									}));
+					categoriesList.stream()
+							.forEach(categories -> categories.stream()
+									.filter(entry -> selectedValue == entry.getTargetValue())
+									.forEach(entry -> entry.setRgb(rgb)));
 					redraw(false);
 				}
 			}
@@ -233,7 +266,7 @@ public class ProductDisplay {
 	private void cachedPaint(boolean recompute) {
 		GC gc = new GC(cache);
 		if (recompute) {
-			categories = new ArrayList<Map<RGB, Category>>();
+			categoriesList = new ArrayList<>();
 		}
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
@@ -274,24 +307,20 @@ public class ProductDisplay {
 			boolean recompute) {
 		// Get all distinct values, create a category for each of them, and insert it
 		// into an LinkedHashMap
-		Map<RGB, Category> categoryMap = null;
+		List<Category> categoryMap = null;
 		if (recompute) {
 			categoryMap = p.getList().stream().map(r -> r.getValue()).distinct()
-					.map(v -> new Category(v, config, minCriteriaValue, maxCriteriaValue))
-					.collect(Collectors.toMap(category -> ((Category) category).getRgb(), category -> category,
-							(e1, e2) -> e1, LinkedHashMap::new));
+					.map(v -> new Category(v, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
 			// I also tried to replace LinkedHashMap::new with
 			// () -> Collections.synchronizedMap(new LinkedHashMap());
 		} else {
-			categoryMap = categories.get(productIndex);
+			categoryMap = categoriesList.get(productIndex);
 		}
 //		System.out.println("Product " + productIndex + " : " + categoryMap.size() + " categories");
 		// Sum all the distincts values
-		double resultsSum = categoryMap.entrySet().stream()
-				.mapToDouble(entry -> Math.abs(entry.getValue().getNormalizedValue())).sum();
+		double resultsSum = categoryMap.stream().mapToDouble(entry -> Math.abs(entry.getNormalizedValue())).sum();
 		Point start = null;
-		for (Entry<RGB, Category> entry : categoryMap.entrySet()) {
-			var category = entry.getValue();
+		for (Category category : categoryMap) {
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
@@ -319,7 +348,7 @@ public class ProductDisplay {
 
 		}
 		if (recompute) {
-			categories.add(categoryMap);
+			categoriesList.add(categoryMap);
 		}
 	}
 
@@ -353,15 +382,19 @@ public class ProductDisplay {
 	 */
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
-			var categoryMap = categories.get(productIndex);
-			for (Entry<RGB, Category> entry : categoryMap.entrySet()) {
-				if (entry.getValue().isLinkDrawable()) {
-					var nextMap = categories.get(productIndex + 1);
-					var linkedCategory = nextMap.get(entry.getKey());
-					if (linkedCategory != null) {
-						var startPoint = entry.getValue().getTargetStartingPoint();
-						var endPoint = linkedCategory.getTargetEndingPoint();
-						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
+			var categoryMap = categoriesList.get(productIndex);
+			for (Category category : categoryMap) {
+				if (category.isLinkDrawable()) {
+					var nextMap = categoriesList.get(productIndex + 1);
+					var o = nextMap.stream().filter(next -> next.getRgb().equals(category.getRgb())).findFirst();
+					if (o.isPresent()) {
+						var linkedCategory = o.get();
+
+						if (linkedCategory != null) {
+							var startPoint = category.getTargetStartingPoint();
+							var endPoint = linkedCategory.getTargetEndingPoint();
+							drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
+						}
 					}
 				}
 			}
