@@ -2,7 +2,6 @@ package org.openlca.display;
 
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
-import org.openlca.util.Pair;
 
 public class Category {
 
@@ -11,29 +10,35 @@ public class Category {
 	private RGB rgb;
 	private double value;
 	private double normalizedValue;
-	private Pair<Point, Point> endSeparation;
-	private Pair<Point, Point> startSeparation;
-	private Point targetStartingPoint;
-	private Point targetEndingPoint;
+	private Point startingLinksPoint;
+	private Point endingLinkPoint;
 	private boolean isDrawable;
 	private Config config;
 	private double min;
 	private double max;
 
-	public Point getTargetStartingPoint() {
-		return targetStartingPoint;
+	
+	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx ) {
+		this.startingLinksPoint = startingLinksPoint;
+		this.endingLinkPoint = endingLinkPoint;
+		startPixel = startX;
+		endPixel = endx;
+	}
+	
+	public Point getStartingLinkPoint() {
+		return startingLinksPoint;
 	}
 
-	public void setTargetStartingPoint(Point startingPoint) {
-		this.targetStartingPoint = startingPoint;
+	public void setStartingLinkPoint(Point startingLinksPoint) {
+		this.startingLinksPoint = startingLinksPoint;
 	}
 
-	public Point getTargetEndingPoint() {
-		return targetEndingPoint;
+	public Point getEndingLinkPoint() {
+		return endingLinkPoint;
 	}
 
-	public void setTargetEndingPoint(Point endingPoint) {
-		this.targetEndingPoint = endingPoint;
+	public void setEndingLinkPoint(Point endingLinkPoint) {
+		this.endingLinkPoint = endingLinkPoint;
 	}
 
 	public Category(double value, Config c, double min, double max) {
@@ -90,24 +95,8 @@ public class Category {
 		this.rgb = rgb;
 	}
 
-	public void setStartSeparation(Point sepStart, Point sepEnd) {
-		startSeparation = new Pair<Point, Point>(sepStart, sepEnd);
-	}
-
-	public Pair<Point, Point> getStartSeparation() {
-		return startSeparation;
-	}
-
-	public void setEndSeparation(Point sepStart, Point sepEnd) {
-		endSeparation = new Pair<Point, Point>(sepStart, sepEnd);
-	}
-
 	public boolean isLinkDrawable() {
 		return isDrawable;
-	}
-
-	public Pair<Point, Point> getEndSeparation() {
-		return endSeparation;
 	}
 
 	public int getStartPixel() {

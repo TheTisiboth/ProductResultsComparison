@@ -1,10 +1,7 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -41,7 +38,6 @@ public class ProductDisplay {
 	private Point screenSize;
 	private Config config;
 	private Point origin;
-	private final int maxProductResultsAmout;
 	private final int xMargin;
 	private final int productHeight;
 	private final int gapBetweenProduct;
@@ -49,7 +45,6 @@ public class ProductDisplay {
 	private ComparisonCriteria comparisonCriteria;
 	private Canvas canvas;
 	private Image cache;
-	private Composite composite;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
 	private List<List<Category>> categoriesList;
@@ -62,13 +57,11 @@ public class ProductDisplay {
 		this.config = config;
 		screenSize = shell.getSize();
 		origin = new Point(0, 0);
-		maxProductResultsAmout = products.stream().mapToInt(p -> p.getList().size()).max().getAsInt();
 		xMargin = 200;
 		productHeight = 30;
 		gapBetweenProduct = 300;
 		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
 		canvas = null;
-		composite = null;
 		maxCriteriaValue = 0;
 		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
@@ -85,15 +78,15 @@ public class ProductDisplay {
 		/**
 		 * Composite component
 		 */
-		var composite1 = new Composite(shell, SWT.NONE);
-		composite = new Composite(shell, SWT.NONE);
-		composite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-		composite.setLayout(new GridLayout(1, false));
+		var row1 = new Composite(shell, SWT.NONE);
+		var row2 = new Composite(shell, SWT.NONE);
+		row2.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+		row2.setLayout(new GridLayout(1, false));
 
 		/**
 		 * Canvas component
 		 */
-		canvas = new Canvas(composite, SWT.V_SCROLL);
+		canvas = new Canvas(row2, SWT.V_SCROLL);
 		canvas.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
 		/**
@@ -104,60 +97,29 @@ public class ProductDisplay {
 		vBar.setMinimum(0);
 
 		addScrollListener(canvas, vBar);
-		addResizeEvent(composite, canvas, vBar);
+		addResizeEvent(row2, canvas, vBar);
+
+		row1.setLayout(new RowLayout());
 
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(true); // Costly painting method, so we cache it first
-
-		composite1.setLayout(new RowLayout());
-		createComparisonCriteriaCombo(composite1);
-		createSelectValueCombo(composite1);
-		createColorPicker(composite1);
+		cachedPaint(true, row2); // Costly painting method, so we cache it first
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
-	}
 
-	private void createColorPicker(Composite composite) {
-		// Start with Celtics green
-		chosenColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
-
-		// Use a label full of spaces to show the color
-		final Label colorLabel = new Label(composite, SWT.NONE);
-		colorLabel.setText("    ");
-		colorLabel.setBackground(chosenColor);
-
-		Button button = new Button(composite, SWT.PUSH);
-		button.setText("Color...");
-		button.addSelectionListener(new SelectionAdapter() {
-			public void widgetSelected(SelectionEvent event) {
-				// Create the color-change dialog
-				ColorDialog dlg = new ColorDialog(shell);
-
-				// Set the selected color in the dialog from
-				// user's selected color
-				dlg.setRGB(colorLabel.getBackground().getRGB());
-
-				// Change the title bar text
-				dlg.setText("Choose a Color");
-
-				// Open the dialog and retrieve the selected color
-				RGB rgb = dlg.open();
-				if (rgb != null) {
-					// Dispose the old color, create the
-					// new one, and set into the label
-					chosenColor.dispose();
-					chosenColor = new Color(composite.getDisplay(), rgb);
-					colorLabel.setBackground(chosenColor);
-					triggerSelectValueComboSelectionListener(false);
-				}
-			}
-		});
+		createComparisonCriteriaCombo(row1, row2);
+		createSelectValueCombo(row1, row2);
+		createColorPicker(row1);
 	}
 
 	/**
-	 * Create a combo component, in order to change the comparison criteria
+	 * Create a combo component, in order to choose the comparison criteria
+	 * 
+	 * @param row1 First row, containing the combo components
+	 * @param row2 Second row, containing the canvas
 	 */
-	private void createComparisonCriteriaCombo(Composite composite) {
-		final Combo c = new Combo(composite, SWT.READ_ONLY);
+	private void createComparisonCriteriaCombo(Composite row1, Composite row2) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Comparison criteria : ");
+		final Combo c = new Combo(row1, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
 		var criterias = ComparisonCriteria.valuesToString();
 		var indexSelectedCriteria = ArrayUtils.indexOf(criterias, config.comparisonCriteria.toString());
@@ -172,13 +134,18 @@ public class ProductDisplay {
 					// We reset the categories
 					categoriesList = new ArrayList<>();
 					sortProducts();
-					redraw(true);
+					redraw(true, row2);
 					triggerSelectValueComboSelectionListener(true);
 				}
 			}
 		});
 	}
 
+	/**
+	 * Trigger a selection event to a combo component
+	 * 
+	 * @param deselect Indicate if we deselect the selected value of the combo
+	 */
 	private void triggerSelectValueComboSelectionListener(boolean deselect) {
 		if (deselect) {
 			categoriesValuesSelection.deselectAll();
@@ -192,39 +159,91 @@ public class ProductDisplay {
 
 	/**
 	 * Create a combo component, in order to change the comparison criteria
+	 * 
+	 * @param row1 First row, containing the combo components
+	 * @param row2 Second row, containing the canvas
 	 */
-	private void createSelectValueCombo(Composite composite) {
-		categoriesValuesSelection = new Combo(composite, SWT.READ_ONLY);
+	private void createSelectValueCombo(Composite row1, Composite row2) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Chosen value : ");
+		categoriesValuesSelection = new Combo(row1, SWT.READ_ONLY);
 		categoriesValuesSelection.setBounds(30, 50, 150, 65);
-		// Get the whole dinstinct categories values
-		String[] categoriesValues = categoriesList.stream()
-				.flatMap(categories -> categories.stream().map(entry -> entry.getTargetValue() + "")).distinct()
-				.sorted().collect(Collectors.toList()).toArray(String[]::new);
-		categoriesValuesSelection.setItems(categoriesValues);
+		setItemSelectValueCombo(categoriesValuesSelection);
 		categoriesValuesSelection.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
-				if (categoriesValuesSelection.getText().equals("")) {
-					// Get the whole dinstinct categories values
-					String[] categoriesValues = categoriesList.stream()
-							.flatMap(categories -> categories.stream().map(entry -> entry.getTargetValue() + ""))
-							.distinct().sorted().collect(Collectors.toList()).toArray(String[]::new);
-					categoriesValuesSelection.setItems(categoriesValues);
+				var index = categoriesValuesSelection.getSelectionIndex();
+				if (index == -1) { // Nothing is selected
+					// Update the whole dinstinct categories values
+					setItemSelectValueCombo(categoriesValuesSelection);
 				} else {
-					double selectedValue = Double.valueOf(categoriesValuesSelection.getText()).doubleValue();
 					RGB rgb = chosenColor.getRGB();
-					// Reset categories colors to default
-					categoriesList.stream().forEach(categories -> categories.stream()
-							.filter(entry -> entry.getRgb().equals(rgb)).forEach(entry -> entry.resetDefaultRGB()));
-					// Set a black color the the chosen categories
+					// Reset categories colors to default (just for the one which where changed)
 					categoriesList.stream()
-							.forEach(categories -> categories.stream()
-									.filter(entry -> selectedValue == entry.getTargetValue())
-									.forEach(entry -> entry.setRgb(rgb)));
-					redraw(false);
+							.forEach(categories -> categories.stream().filter(category -> category.getRgb().equals(rgb))
+									.forEach(category -> category.resetDefaultRGB()));
+					String selectedText = categoriesValuesSelection.getText();
+					if (!"".equals(selectedText)) {
+						double selectedValue = Double.valueOf(selectedText).doubleValue();
+						// Set a chosen color to the chosen categories
+						categoriesList.stream()
+								.forEach(categories -> categories.stream()
+										.filter(category -> selectedValue == category.getTargetValue())
+										.forEach(category -> category.setRgb(rgb)));
+					}
+					redraw(false, row2);
 				}
 			}
 		});
+	}
 
+	/**
+	 * Set the combo item with the different distinct categories values
+	 * 
+	 * @param combo The Combo component
+	 */
+	private void setItemSelectValueCombo(Combo combo) {
+		List<String> categoriesValues = categoriesList.stream()
+				.flatMap(categories -> categories.stream().map(category -> category.getTargetValue() + "")).distinct()
+				.sorted().collect(Collectors.toList());
+		categoriesValues.add(0, "");
+		combo.setItems(categoriesValues.toArray(String[]::new));
+	}
+
+	/**
+	 * The swt widget that allows to pick a custom color
+	 * 
+	 * @param composite The parent component
+	 */
+	private void createColorPicker(Composite composite) {
+		// Default color
+		chosenColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
+		// Use a label full of spaces to show the color
+		final Label colorLabel = new Label(composite, SWT.NONE);
+		colorLabel.setText("    ");
+		colorLabel.setBackground(chosenColor);
+		Button button = new Button(composite, SWT.PUSH);
+		button.setText("Color...");
+		button.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent event) {
+				// Create the color-change dialog
+				ColorDialog dlg = new ColorDialog(shell);
+				// Set the selected color in the dialog from
+				// user's selected color
+				dlg.setRGB(colorLabel.getBackground().getRGB());
+				// Change the title bar text
+				dlg.setText("Choose a Color");
+				// Open the dialog and retrieve the selected color
+				RGB rgb = dlg.open();
+				if (rgb != null) {
+					// Dispose the old color, create the
+					// new one, and set into the label
+					chosenColor.dispose();
+					chosenColor = new Color(composite.getDisplay(), rgb);
+					colorLabel.setBackground(chosenColor);
+					triggerSelectValueComboSelectionListener(false);
+				}
+			}
+		});
 	}
 
 	/**
@@ -243,13 +262,12 @@ public class ProductDisplay {
 	 * @param recompute Tell if we have to recompute the categories. If false, then
 	 *                  we just redraw the whole objects
 	 */
-
-	private void redraw(boolean recompute) {
+	private void redraw(boolean recompute, Composite composite) {
 		screenSize = composite.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(recompute); // Costly painting, so we cache it; Called one time at the beginning
+		cachedPaint(recompute, composite); // Costly painting, so we cache it; Called one time at the beginning
 		canvas.redraw();
 	}
 
@@ -258,12 +276,11 @@ public class ProductDisplay {
 	 * matching results. Since it is costly, it is firstly drawed in an image. Once
 	 * it is finished, we paint the image
 	 * 
-	 * @param recompute
-	 * 
-	 * @param gc        The GC component
+	 * @param recompute Tell if we have to recompute the categories. If false, then
+	 *                  we just redraw the whole objects
 	 * @param composite The parent component
 	 */
-	private void cachedPaint(boolean recompute) {
+	private void cachedPaint(boolean recompute, Composite composite) {
 		GC gc = new GC(cache);
 		if (recompute) {
 			categoriesList = new ArrayList<>();
@@ -283,11 +300,12 @@ public class ProductDisplay {
 	 * Handle the current product. Draw a rectangle, write the product name in it,
 	 * and handle the product results
 	 * 
-	 * @param e               The Paint event
+	 * @param gc              The GC component
 	 * @param maxProductWidth The maximal width for a product
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
-	 * @param recompute
+	 * @param recompute       Tell if we have to recompute the categories. If false,
+	 *                        then we just redraw the whole objects
 	 */
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, boolean recompute) {
 		var p = products.get(productIndex);
@@ -302,25 +320,31 @@ public class ProductDisplay {
 		handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
 	}
 
-	@SuppressWarnings("unchecked")
+	/**
+	 * Handle the categories, which represent a bundle of same values
+	 * 
+	 * @param gc           The GC component
+	 * @param rectEdge     The coordinate of the product rectangle
+	 * @param productIndex The index of the current product
+	 * @param p            The current product
+	 * @param productWidth The product width
+	 * @param recompute    Tell if we have to recompute the categories. If false,
+	 *                     then we just redraw the whole objects
+	 */
 	private void handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
 			boolean recompute) {
-		// Get all distinct values, create a category for each of them, and insert it
-		// into an LinkedHashMap
-		List<Category> categoryMap = null;
+		List<Category> categories = null;
 		if (recompute) {
-			categoryMap = p.getList().stream().map(r -> r.getValue()).distinct()
+			// Get all distinct values, create a category for each of them
+			categories = p.getList().stream().map(r -> r.getValue()).distinct()
 					.map(v -> new Category(v, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
-			// I also tried to replace LinkedHashMap::new with
-			// () -> Collections.synchronizedMap(new LinkedHashMap());
 		} else {
-			categoryMap = categoriesList.get(productIndex);
+			categories = categoriesList.get(productIndex);
 		}
-//		System.out.println("Product " + productIndex + " : " + categoryMap.size() + " categories");
 		// Sum all the distincts values
-		double resultsSum = categoryMap.stream().mapToDouble(entry -> Math.abs(entry.getNormalizedValue())).sum();
+		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
 		Point start = null;
-		for (Category category : categoryMap) {
+		for (Category category : categories) {
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
@@ -335,25 +359,37 @@ public class ProductDisplay {
 			gc.setBackground(new Color(gc.getDevice(), category.getRgb()));
 			gc.fillRectangle(start.x, start.y, categoryWidth, productHeight - 1);
 			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-			var end = new Point(start.x + categoryWidth, start.y);
-			var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
-			var endingPoint = new Point(startingPoint.x, start.y - 2);
-			category.setTargetStartingPoint(startingPoint);
-			category.setTargetEndingPoint(endingPoint);
-			category.setStartPixel(start.x);
-			category.setEndPixel(end.x);
+			var end = computeEndCategory(start, category, categoryWidth);
 			start = end;
-//			drawLine(gc, start, new Point(start.x, start.y + productHeight - 2), SWT.COLOR_WHITE, SWT.COLOR_BLACK);
-//			System.out.println(category);
-
 		}
 		if (recompute) {
-			categoriesList.add(categoryMap);
+			categoriesList.add(categories);
 		}
 	}
 
 	/**
-	 * Draw a line, with an optional colour
+	 * Compute the end of the current category, and set some important information
+	 * about the category
+	 * 
+	 * @param start         The starting point of the category
+	 * @param category      The current category
+	 * @param categoryWidth The width of the category
+	 * @return The end point of the category
+	 */
+	private Point computeEndCategory(Point start, Category category, int categoryWidth) {
+		var end = new Point(start.x + categoryWidth, start.y);
+		var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
+		var endingPoint = new Point(startingPoint.x, start.y - 2);
+		category.setData(startingPoint, endingPoint, start.x, end.x);
+		category.setStartingLinkPoint(startingPoint);
+		category.setEndingLinkPoint(endingPoint);
+		category.setStartPixel(start.x);
+		category.setEndPixel(end.x);
+		return end;
+	}
+
+	/**
+	 * Draw a line, with an optional color
 	 * 
 	 * @param gc          The GC
 	 * @param start       The starting point
@@ -386,20 +422,17 @@ public class ProductDisplay {
 			for (Category category : categoryMap) {
 				if (category.isLinkDrawable()) {
 					var nextMap = categoriesList.get(productIndex + 1);
-					var o = nextMap.stream().filter(next -> next.getRgb().equals(category.getRgb())).findFirst();
-					if (o.isPresent()) {
-						var linkedCategory = o.get();
-
-						if (linkedCategory != null) {
-							var startPoint = category.getTargetStartingPoint();
-							var endPoint = linkedCategory.getTargetEndingPoint();
-							drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
-						}
+					// We search for a category that has the same color
+					var optional = nextMap.stream().filter(next -> next.getRgb().equals(category.getRgb())).findFirst();
+					if (optional.isPresent()) {
+						var linkedCategory = optional.get();
+						var startPoint = category.getStartingLinkPoint();
+						var endPoint = linkedCategory.getEndingLinkPoint();
+						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
 					}
 				}
 			}
 		}
-
 	}
 
 	/**
@@ -462,7 +495,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(true);
+				redraw(true, composite);
 			}
 		});
 	}
@@ -471,8 +504,7 @@ public class ProductDisplay {
 	 * Add a paint listener to the canvas. This is called whenever the canvas needs
 	 * to be redrawed, then it draws the cached image
 	 * 
-	 * @param composite Parent component of the canvas
-	 * @param canvas    A Canvas component
+	 * @param canvas A Canvas component
 	 */
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
