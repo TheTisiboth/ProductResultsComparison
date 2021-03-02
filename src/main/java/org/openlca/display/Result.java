@@ -21,17 +21,17 @@ public class Result {
 	}
 
 	public double getValue() {
-		switch (criteria) {
-		case AMOUNT:
-			return contribution.amount;
-		case CATEGORY:
-			return contribution.item.category;
-		case LOCATION:
-			try {
+		try {
+			switch (criteria) {
+			case AMOUNT:
+				return contribution.amount;
+			case CATEGORY:
+				return contribution.item.category;
+			case LOCATION:
 				return ((ProcessDescriptor) contribution.item).location;
-			} catch (ClassCastException e) {
-				return 0;
 			}
+		} catch (ClassCastException | NullPointerException e) {
+			return 0;
 		}
 		return 0;
 	}
@@ -67,7 +67,7 @@ public class Result {
 		} else if (percentage == -1) {
 			return new RGB(192, 192, 192); // Grey color for unfocused values (0 or null)
 		}
-		java.awt.Color tmpColor = ColorHelper.numberToColor((double) percentage);
+		java.awt.Color tmpColor = GradientColorHelper.numberToColor((double) percentage);
 		rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());
 		return rgb;
 	}

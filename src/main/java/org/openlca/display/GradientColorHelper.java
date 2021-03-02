@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ColorHelper {
+public class GradientColorHelper {
 
 	private final static int LOW = 0;
 	private final static int HIGH = 255;

@@ -10,13 +10,16 @@ public class Category {
 	private int endPixel;
 	private RGB rgb;
 	private double value;
+	private double normalizedValue;
 	private Pair<Point, Point> endSeparation;
 	private Pair<Point, Point> startSeparation;
-	private Product product;
 	private Point targetStartingPoint;
 	private Point targetEndingPoint;
 	private boolean isDrawable;
-	
+	private Config config;
+	private double min;
+	private double max;
+
 	public Point getTargetStartingPoint() {
 		return targetStartingPoint;
 	}
@@ -33,22 +36,29 @@ public class Category {
 		this.targetEndingPoint = endingPoint;
 	}
 
-	public Category(double value, Product p, double min, double max) {
+	public Category(double value, Config c, double min, double max) {
+		this.min = min;
+		this.max = max;
+		this.value = value;
+		this.normalizedValue = value + Math.abs(min) + 1;
 		isDrawable = true;
-		rgb = getRGB(value, min, max);
-		product = p;
-		this.value = value+Math.abs(min)+1;
+		config = c;
+		rgb = computeRGB();
 	}
 
-	public double getValue() {
+	public double getTargetValue() {
 		return value;
 	}
 
-	private RGB getRGB(double value, double min, double max) {
+	public double getNormalizedValue() {
+		return normalizedValue;
+	}
+
+	private RGB computeRGB() {
 		double percentage = 0;
 
 		try {
-			percentage = ((value - min) * 100) / (max - min);
+			percentage = (((value - min) * 100) / (max - min)) / 100;
 		} catch (Exception e) {
 			percentage = -1;
 		}
@@ -58,9 +68,18 @@ public class Category {
 			isDrawable = false;
 			return new RGB(192, 192, 192); // Grey color for unfocused values (0 or null)
 		}
-		java.awt.Color tmpColor = ColorHelper.numberToColor((double) percentage);
-		rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());
+		RGB rgb = null;
+		if (config.useGradientColor) {
+			java.awt.Color tmpColor = GradientColorHelper.numberToColorPercentage((double) percentage);
+			rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());
+		} else {
+			rgb = ColorPaletteHelper.getColor(percentage);
+		}
 		return rgb;
+	}
+
+	public void resetDefaultRGB() {
+		rgb = computeRGB();
 	}
 
 	public RGB getRgb() {
@@ -102,13 +121,13 @@ public class Category {
 	public int getEndPixel() {
 		return endPixel;
 	}
-	
+
 	public void setEndPixel(int startIndex) {
 		this.endPixel = startIndex;
 	}
 
 	public String toString() {
-		return rgb + " / " + value+" / [ "+startPixel+"; "+endPixel+" ]";
+		return rgb + " / " + value + " / [ " + startPixel + "; " + endPixel + " ]";
 	}
 
 }

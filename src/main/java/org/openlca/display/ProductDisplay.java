@@ -22,6 +22,7 @@ import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.RowLayout;
 import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
@@ -30,7 +31,6 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
-import org.openlca.util.Pair;
 
 public class ProductDisplay {
 	private Shell shell;
@@ -50,6 +50,7 @@ public class ProductDisplay {
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
 	private List<Map<RGB, Category>> categories;
+	private Combo categoriesValuesSelection;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -76,10 +77,11 @@ public class ProductDisplay {
 	 */
 	void display() {
 		System.out.println("Display start");
-		createCombo();
+
 		/**
 		 * Composite component
 		 */
+		var composite1 = new Composite(shell, SWT.NONE);
 		composite = new Composite(shell, SWT.NONE);
 		composite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		composite.setLayout(new GridLayout(1, false));
@@ -101,15 +103,19 @@ public class ProductDisplay {
 		addResizeEvent(composite, canvas, vBar);
 
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(); // Costly painting method, so we cache it first
+		cachedPaint(true); // Costly painting method, so we cache it first
+
+		composite1.setLayout(new RowLayout());
+		createComparisonCriteriaCombo(composite1);
+		createSelectValueCombo(composite1);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 	}
 
 	/**
 	 * Create a combo component, in order to change the comparison criteria
 	 */
-	private void createCombo() {
-		final Combo c = new Combo(shell, SWT.READ_ONLY);
+	private void createComparisonCriteriaCombo(Composite composite) {
+		final Combo c = new Combo(composite, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
 		var criterias = ComparisonCriteria.valuesToString();
 		var indexSelectedCriteria = ArrayUtils.indexOf(criterias, config.comparisonCriteria.toString());
@@ -124,10 +130,68 @@ public class ProductDisplay {
 					// We reset the categories
 					categories = new ArrayList<Map<RGB, Category>>();
 					sortProducts();
-					redraw();
+					redraw(true);
+					triggerSelectValueComboSelectionListener();
+				}
+			}
+
+			private void triggerSelectValueComboSelectionListener() {
+				categoriesValuesSelection.deselectAll();
+				Event event = new Event();
+				event.widget = categoriesValuesSelection;
+				event.display = categoriesValuesSelection.getDisplay();
+				event.type = SWT.Selection;
+				categoriesValuesSelection.notifyListeners(SWT.Selection, event);
+			}
+		});
+	}
+
+	/**
+	 * Create a combo component, in order to change the comparison criteria
+	 */
+	private void createSelectValueCombo(Composite composite) {
+		categoriesValuesSelection = new Combo(composite, SWT.READ_ONLY);
+		categoriesValuesSelection.setBounds(30, 50, 150, 65);
+		// Get the whole dinstinct categories values
+		String[] categoriesValues = categories.stream()
+				.flatMap(categories -> categories.entrySet().stream()
+						.map(entry -> entry.getValue().getTargetValue() + ""))
+				.distinct().sorted().collect(Collectors.toList()).toArray(String[]::new);
+		categoriesValuesSelection.setItems(categoriesValues);
+		categoriesValuesSelection.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				if (categoriesValuesSelection.getText().equals("")) {
+					// Get the whole dinstinct categories values
+					String[] categoriesValues = categories.stream()
+							.flatMap(categories -> categories.entrySet().stream()
+									.map(entry -> entry.getValue().getTargetValue() + ""))
+							.distinct().sorted().collect(Collectors.toList()).toArray(String[]::new);
+					categoriesValuesSelection.setItems(categoriesValues);
+				} else {
+					String selectedValue = categoriesValuesSelection.getText();
+					RGB rgb = new RGB(0, 0, 0);
+					// Reset categories colors to default
+					categories.stream().forEach(
+							c -> c.entrySet().stream().filter(entry -> entry.getKey().equals(rgb)).forEach((entry) -> {
+								var cat = entry.getValue();
+								cat.resetDefaultRGB();
+								c.remove(entry.getKey());
+								c.put(cat.getRgb(), cat);
+							}));
+					// Set a black color the the chosen categories
+					categories.stream()
+							.forEach(c -> c.entrySet().stream().filter(
+									entry -> Double.toString(entry.getValue().getTargetValue()).equals(selectedValue))
+									.forEach((entry) -> {
+										entry.getValue().setRgb(rgb);
+										c.put(rgb, entry.getValue());
+										c.remove(entry.getKey());
+									}));
+					redraw(false);
 				}
 			}
 		});
+
 	}
 
 	/**
@@ -142,13 +206,17 @@ public class ProductDisplay {
 
 	/**
 	 * Redraw everything
+	 * 
+	 * @param recompute Tell if we have to recompute the categories. If false, then
+	 *                  we just redraw the whole objects
 	 */
-	private void redraw() {
+
+	private void redraw(boolean recompute) {
 		screenSize = composite.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(); // Costly painting, so we cache it; Called one time at the beginning
+		cachedPaint(recompute); // Costly painting, so we cache it; Called one time at the beginning
 		canvas.redraw();
 	}
 
@@ -157,18 +225,22 @@ public class ProductDisplay {
 	 * matching results. Since it is costly, it is firstly drawed in an image. Once
 	 * it is finished, we paint the image
 	 * 
+	 * @param recompute
+	 * 
 	 * @param gc        The GC component
 	 * @param composite The parent component
 	 */
-	private void cachedPaint() {
+	private void cachedPaint(boolean recompute) {
 		GC gc = new GC(cache);
-		categories = new ArrayList<Map<RGB, Category>>();
+		if (recompute) {
+			categories = new ArrayList<Map<RGB, Category>>();
+		}
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			handleProduct(gc, maxProductWidth, rectEdge, productIndex);
+			handleProduct(gc, maxProductWidth, rectEdge, productIndex, recompute);
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
@@ -182,11 +254,10 @@ public class ProductDisplay {
 	 * @param maxProductWidth The maximal width for a product
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
+	 * @param recompute
 	 */
-	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex) {
+	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, boolean recompute) {
 		var p = products.get(productIndex);
-		final int productResultsAmount = p.getList().size();
-//		int productWidth = (int) (((double) productResultsAmount / (double) maxProductResultsAmout) * maxProductWidth);
 		int productWidth = (int) maxProductWidth;
 
 		p.setBounds(rectEdge, productWidth);
@@ -195,20 +266,36 @@ public class ProductDisplay {
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
-		Map<RGB, Category> categoryMap = p.getList().stream().map(r -> r.getValue()).distinct()
-				.map(v -> new Category(v, p, minCriteriaValue, maxCriteriaValue))
-				.collect(Collectors.toMap(k -> ((Category) k).getRgb(), v -> v, (e1, e2) -> e1, LinkedHashMap::new));
+		handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
+	}
 
-		System.out.println("Product " + productIndex + " : " + categoryMap.size() + " categories");
-		double resultsSum = categoryMap.entrySet().stream().mapToDouble(c -> Math.abs(c.getValue().getValue())).sum();
+	@SuppressWarnings("unchecked")
+	private void handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
+			boolean recompute) {
+		// Get all distinct values, create a category for each of them, and insert it
+		// into an LinkedHashMap
+		Map<RGB, Category> categoryMap = null;
+		if (recompute) {
+			categoryMap = p.getList().stream().map(r -> r.getValue()).distinct()
+					.map(v -> new Category(v, config, minCriteriaValue, maxCriteriaValue))
+					.collect(Collectors.toMap(category -> ((Category) category).getRgb(), category -> category,
+							(e1, e2) -> e1, LinkedHashMap::new));
+			// I also tried to replace LinkedHashMap::new with
+			// () -> Collections.synchronizedMap(new LinkedHashMap());
+		} else {
+			categoryMap = categories.get(productIndex);
+		}
+//		System.out.println("Product " + productIndex + " : " + categoryMap.size() + " categories");
+		// Sum all the distincts values
+		double resultsSum = categoryMap.entrySet().stream()
+				.mapToDouble(entry -> Math.abs(entry.getValue().getNormalizedValue())).sum();
 		Point start = null;
 		for (Entry<RGB, Category> entry : categoryMap.entrySet()) {
-			var startCategory = entry.getValue();
-
+			var category = entry.getValue();
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
-			var value = startCategory.getValue();
+			var value = category.getNormalizedValue();
 			int categoryWidth = 0;
 			if (value == 0.0) {
 				categoryWidth = (int) (productWidth - start.x);
@@ -216,22 +303,24 @@ public class ProductDisplay {
 				var percentage = value / resultsSum;
 				categoryWidth = (int) (productWidth * percentage);
 			}
-			gc.setBackground(new Color(gc.getDevice(), startCategory.getRgb()));
-			gc.fillRectangle(start.x , start.y, categoryWidth, productHeight - 1);
+			gc.setBackground(new Color(gc.getDevice(), category.getRgb()));
+			gc.fillRectangle(start.x, start.y, categoryWidth, productHeight - 1);
 			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-			var end = new Point(start.x + categoryWidth + 1, start.y);
+			var end = new Point(start.x + categoryWidth, start.y);
 			var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
-			var endingPoint = new Point(startingPoint.x, start.y-2);
-			startCategory.setTargetStartingPoint(startingPoint);
-			startCategory.setTargetEndingPoint(endingPoint);
-			startCategory.setStartPixel(start.x);
-			startCategory.setEndPixel(end.x);
+			var endingPoint = new Point(startingPoint.x, start.y - 2);
+			category.setTargetStartingPoint(startingPoint);
+			category.setTargetEndingPoint(endingPoint);
+			category.setStartPixel(start.x);
+			category.setEndPixel(end.x);
 			start = end;
-			drawLine(gc, start, new Point(start.x, start.y + productHeight - 2), SWT.COLOR_WHITE, SWT.COLOR_BLACK);
-			System.out.println(startCategory);
+//			drawLine(gc, start, new Point(start.x, start.y + productHeight - 2), SWT.COLOR_WHITE, SWT.COLOR_BLACK);
+//			System.out.println(category);
 
 		}
-		categories.add(categoryMap);
+		if (recompute) {
+			categories.add(categoryMap);
+		}
 	}
 
 	/**
@@ -272,7 +361,7 @@ public class ProductDisplay {
 					if (linkedCategory != null) {
 						var startPoint = entry.getValue().getTargetStartingPoint();
 						var endPoint = linkedCategory.getTargetEndingPoint();
-						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
+						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
 					}
 				}
 			}
@@ -340,7 +429,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw();
+				redraw(true);
 			}
 		});
 	}
