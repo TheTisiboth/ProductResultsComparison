@@ -202,11 +202,12 @@ public class ProductDisplay {
 	 * @param combo The Combo component
 	 */
 	private void setItemSelectValueCombo(Combo combo) {
-		List<String> categoriesValues = categoriesList.stream()
-				.flatMap(categories -> categories.stream().map(category -> category.getTargetValue() + "")).distinct()
+		List<Double> categoriesValues = categoriesList.stream()
+				.flatMap(categories -> categories.stream().map(category -> category.getTargetValue())).distinct()
 				.sorted().collect(Collectors.toList());
-		categoriesValues.add(0, "");
-		combo.setItems(categoriesValues.toArray(String[]::new));
+		List<String> values = categoriesValues.stream().map(e -> e.toString()).collect(Collectors.toList());
+		values.add(0, "");
+		combo.setItems(values.toArray(String[]::new));
 	}
 
 	/**
@@ -428,7 +429,8 @@ public class ProductDisplay {
 						var linkedCategory = optional.get();
 						var startPoint = category.getStartingLinkPoint();
 						var endPoint = linkedCategory.getEndingLinkPoint();
-						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
+//						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
+						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
 					}
 				}
 			}
