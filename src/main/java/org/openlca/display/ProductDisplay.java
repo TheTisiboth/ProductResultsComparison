@@ -314,11 +314,20 @@ public class ProductDisplay {
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
 		gc.drawText(p.getName(), textPos.x, textPos.y);
-		textPos.y+=20;
-		gc.drawText("Impact index: "+p.getImpactIndex(), textPos.x, textPos.y);
+		textPos.y += 20;
+		gc.drawText("Impact index: " + p.getImpactIndex(), textPos.x, textPos.y);
 
 		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
 
+		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
+			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
+			Point endPoint = new Point(startPoint.x + productWidth, startPoint.y);
+			drawLine(gc, startPoint, endPoint, null, null);
+			endPoint = new Point(startPoint.x + 15, startPoint.y + 15);
+			drawLine(gc, startPoint, endPoint, null, null);
+			endPoint = new Point(startPoint.x + 15, startPoint.y - 15);
+			drawLine(gc, startPoint, endPoint, null, null);
+		}
 		p.setBounds(rectEdge, productWidth);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
@@ -355,7 +364,7 @@ public class ProductDisplay {
 		int chunk = -1, chunkSize = 0;
 		boolean gapEnoughBig = true;
 		var newProductWidth = 0;
-		if (gap < 3.0) {
+		if (gap < 1.0) {
 			// If the gap is to small, we put a certain amount of results in the same
 			// chunk
 			chunkSize = (int) Math.ceil(1 / gap);
