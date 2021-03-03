@@ -18,7 +18,7 @@ public class Product {
 	private double width;
 	private Point startEdge;
 	private int impactIndex;
-	
+
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
 	}
@@ -36,7 +36,7 @@ public class Product {
 	public int getImpactIndex() {
 		return impactIndex;
 	}
-	
+
 	public static void updateComparisonCriteria(ComparisonCriteria c) {
 		criteria = c;
 		Result.criteria = c;
@@ -136,6 +136,9 @@ public class Product {
 		return s;
 	}
 
+	/**
+	 * Ascending sort of the products results
+	 */
 	public void sort() {
 		switch (criteria) {
 		case AMOUNT:
@@ -143,15 +146,15 @@ public class Product {
 				double a1 = r1.getContribution().amount;
 				double a2 = r2.getContribution().amount;
 				if (a1 == 0.0 && a2 != 0.0) {
-					return 1;
-				} else if (a1 != 0.0 && a2 == 0.0) {
 					return -1;
+				} else if (a1 != 0.0 && a2 == 0.0) {
+					return 1;
 				}
 				if (a2 > a1) {
-					return 1;
+					return -1;
 				}
 				if (a1 > a2) {
-					return -1;
+					return 1;
 				}
 				return 0;
 			});
@@ -163,16 +166,16 @@ public class Product {
 				if (c1 == null && c2 == null) {
 					return 0;
 				} else if (c1 == null && c2 != null) {
-					return 1;
-				} else if (c1 != null && c2 == null) {
 					return -1;
+				} else if (c1 != null && c2 == null) {
+					return 1;
 				}
 				long result = c1.longValue() - c2.longValue();
 				if (result < 0) {
-					return 1;
+					return -1;
 				}
 				if (result > 0) {
-					return -1;
+					return 1;
 				}
 				return 0;
 			});
@@ -185,16 +188,16 @@ public class Product {
 					if (l1 == null && l2 == null) {
 						return 0;
 					} else if (l1 == null && l2 != null) {
-						return 1;
-					} else if (l1 != null && l2 == null) {
 						return -1;
+					} else if (l1 != null && l2 == null) {
+						return 1;
 					}
 					long result = l1.longValue() - l2.longValue();
 					if (result < 0) {
-						return 1;
+						return -1;
 					}
 					if (result > 0) {
-						return -1;
+						return 1;
 					}
 					return 0;
 				} catch (ClassCastException e) {

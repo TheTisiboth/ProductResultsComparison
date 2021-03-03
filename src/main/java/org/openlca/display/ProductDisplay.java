@@ -323,9 +323,9 @@ public class ProductDisplay {
 			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
 			Point endPoint = new Point(startPoint.x + productWidth, startPoint.y);
 			drawLine(gc, startPoint, endPoint, null, null);
-			endPoint = new Point(startPoint.x + 15, startPoint.y + 15);
+			startPoint = new Point(endPoint.x - 15, endPoint.y + 15);
 			drawLine(gc, startPoint, endPoint, null, null);
-			endPoint = new Point(startPoint.x + 15, startPoint.y - 15);
+			startPoint = new Point(endPoint.x - 15, endPoint.y - 15);
 			drawLine(gc, startPoint, endPoint, null, null);
 		}
 		p.setBounds(rectEdge, productWidth);
@@ -385,26 +385,17 @@ public class ProductDisplay {
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
-			var value = category.getTargetValue();
 			int categoryWidth = 0;
-			if (value == 0.0) {
-				categoryWidth = (int) (rectEdge.x + productWidth - start.x);
-				if (categoryWidth < 0) {
-					categoryWidth = -categoryWidth;
-					productWidth = start.x + categoryWidth;
-				}
+			if (!gapEnoughBig && chunk != newChunk) {
+				// We are on a new chunk, so we draw a category with a width of 1 pixel
+				categoryWidth = 1;
+			} else if (!gapEnoughBig && chunk == newChunk) {
+				// We stay on the same chunk, so we don't draw the category
+				categoryWidth = 0;
 			} else {
-				if (!gapEnoughBig && chunk != newChunk) {
-					// We are on a new chunk, so we draw a category with a width of 1 pixel
-					categoryWidth = 1;
-				} else if (!gapEnoughBig && chunk == newChunk) {
-					// We stay on the same chunk, so we don't draw the category
-					categoryWidth = 0;
-				} else {
-					value = category.getNormalizedValue();
-					var percentage = value / resultsSum;
-					categoryWidth = (int) (productWidth * percentage);
-				}
+				var value = category.getNormalizedValue();
+				var percentage = value / resultsSum;
+				categoryWidth = (int) (productWidth * percentage);
 			}
 			newProductWidth += categoryWidth;
 			gc.setBackground(new Color(gc.getDevice(), category.getRgb()));
