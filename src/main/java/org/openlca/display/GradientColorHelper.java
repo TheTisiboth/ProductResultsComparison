@@ -43,6 +43,9 @@ public class GradientColorHelper {
 		if (value < 0 || value > 1) {
 			return null;
 		}
+//		long seed =  (long) ( value*1000000000.0);
+//		Random rand = new Random(seed);
+//		var v = rand.nextDouble()%1.0;
 		Double d = value * factor;
 		int index = d.intValue();
 		if (index == factor) {

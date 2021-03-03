@@ -311,28 +311,36 @@ public class ProductDisplay {
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, boolean recompute) {
 		var p = products.get(productIndex);
 		int productWidth = (int) maxProductWidth;
+		// Draw the product name
+		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
+		gc.drawText(p.getName(), textPos.x, textPos.y);
+		textPos.y+=20;
+		gc.drawText("Impact index: "+p.getImpactIndex(), textPos.x, textPos.y);
+
+		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
 
 		p.setBounds(rectEdge, productWidth);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
-		// Draw the product name
-		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText(p.getName(), textPos.x, textPos.y);
-		handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
 	}
 
 	/**
 	 * Handle the categories, which represent a bundle of same values
 	 * 
-	 * @param gc           The GC component
-	 * @param rectEdge     The coordinate of the product rectangle
-	 * @param productIndex The index of the current product
-	 * @param p            The current product
-	 * @param productWidth The product width
-	 * @param recompute    Tell if we have to recompute the categories. If false,
-	 *                     then we just redraw the whole objects
+	 * @param gc             The GC component
+	 * @param rectEdge       The coordinate of the product rectangle
+	 * @param productIndex   The index of the current product
+	 * @param p              The current product
+	 * @param productWidth   The product width
+	 * @param recompute      Tell if we have to recompute the categories. If false,
+	 *                       then we just redraw the whole objects
+	 * @param drawSeparation
+	 * @param chunkSize
+	 * @param chunk
+	 * @param gap
+	 * @return
 	 */
-	private void handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
+	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
 			boolean recompute) {
 		List<Category> categories = null;
 		if (recompute) {
@@ -342,30 +350,77 @@ public class ProductDisplay {
 		} else {
 			categories = categoriesList.get(productIndex);
 		}
+		final int categoriesAmount = categories.size();
+		double gap = ((double) productWidth / categoriesAmount);
+		int chunk = -1, chunkSize = 0;
+		boolean gapEnoughBig = true;
+		var newProductWidth = 0;
+		if (gap < 3.0) {
+			// If the gap is to small, we put a certain amount of results in the same
+			// chunk
+			chunkSize = (int) Math.ceil(1 / gap);
+			gapEnoughBig = false;
+		}
+
 		// Sum all the distincts values
 		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
 		Point start = null;
-		for (Category category : categories) {
+		var newChunk = 0;
+		System.out.println();
+		System.out.println("Product " + productIndex + " : " + categoriesAmount + " categories");
+		for (var categoriesIndex = 0; categoriesIndex < categories.size(); categoriesIndex++) {
+			if (!gapEnoughBig) {
+				newChunk = computeChunk(gap, chunk, chunkSize, categoriesIndex);
+			}
+			var category = categories.get(categoriesIndex);
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
-			var value = category.getNormalizedValue();
+			var value = category.getTargetValue();
 			int categoryWidth = 0;
 			if (value == 0.0) {
-				categoryWidth = (int) (productWidth - start.x);
+				categoryWidth = (int) (rectEdge.x + productWidth - start.x);
+				if (categoryWidth < 0) {
+					categoryWidth = -categoryWidth;
+					productWidth = start.x + categoryWidth;
+				}
 			} else {
-				var percentage = value / resultsSum;
-				categoryWidth = (int) (productWidth * percentage);
+				if (!gapEnoughBig && chunk != newChunk) {
+					// We are on a new chunk, so we draw a category with a width of 1 pixel
+					categoryWidth = 1;
+				} else if (!gapEnoughBig && chunk == newChunk) {
+					// We stay on the same chunk, so we don't draw the category
+					categoryWidth = 0;
+				} else {
+					value = category.getNormalizedValue();
+					var percentage = value / resultsSum;
+					categoryWidth = (int) (productWidth * percentage);
+				}
 			}
+			newProductWidth += categoryWidth;
 			gc.setBackground(new Color(gc.getDevice(), category.getRgb()));
 			gc.fillRectangle(start.x, start.y, categoryWidth, productHeight - 1);
 			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
 			var end = computeEndCategory(start, category, categoryWidth);
-			start = end;
+			if (gapEnoughBig || !gapEnoughBig && chunk != newChunk) {
+				// We end the current chunk / category
+				start = end;
+				chunk = newChunk;
+			}
 		}
 		if (recompute) {
 			categoriesList.add(categories);
 		}
+		return newProductWidth;
+	}
+
+	private int computeChunk(double gap, int chunk, int chunkSize, int resultIndex) {
+		// Every chunkSize, we increment the chunk
+		var newChunk = (resultIndex % (int) chunkSize) == 0;
+		if (newChunk == true) {
+			chunk++;
+		}
+		return chunk;
 	}
 
 	/**
@@ -430,7 +485,11 @@ public class ProductDisplay {
 						var startPoint = category.getStartingLinkPoint();
 						var endPoint = linkedCategory.getEndingLinkPoint();
 //						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
-						drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
+						if (config.useBezierCurve) {
+							drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
+						} else {
+							drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), null);
+						}
 					}
 				}
 			}
@@ -497,7 +556,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(true, composite);
+				redraw(false, composite);
 			}
 		});
 	}

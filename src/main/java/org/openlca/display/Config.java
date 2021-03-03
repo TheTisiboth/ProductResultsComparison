@@ -7,4 +7,5 @@ public class Config {
 	public final boolean useFakeResults = false;
 	public final ComparisonCriteria comparisonCriteria = ComparisonCriteria.AMOUNT;
 	public final boolean useGradientColor = true;
+	public final boolean useBezierCurve = false;
 }

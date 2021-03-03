@@ -31,8 +31,8 @@ public class App {
 
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
-		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE);
-		shell.setText("Canvas Example");
+		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE| SWT.MAX);
+		shell.setText("Product comparison GUI");
 		shell.setLayout(new GridLayout());
 		List<Product> products;
 		if (!config.useFakeResults) {
@@ -68,6 +68,7 @@ public class App {
 				var result = ContributionResult.of(db, data);
 				// select the impact category with the highest result
 				ImpactDescriptor impact = null;
+				var impactIndex = 0;
 				for (int i = 0; i < result.impactIndex.size(); i++) {
 					var next = result.impactIndex.at(i);
 					if (impact == null) {
@@ -78,10 +79,11 @@ public class App {
 					var nextVal = result.getTotalImpactResult(next);
 					if (nextVal > currentVal) {
 						impact = next;
+						impactIndex = i;
 					}
 				}
 				List<Contribution<CategorizedDescriptor>> cs = result.getProcessContributions(impact);
-				var p = new Product(cs, dbName);
+				var p = new Product(cs, dbName,impactIndex);
 				list.add(p);
 			}
 		}
@@ -101,7 +103,7 @@ public class App {
 					if (index > 0 && index < result.impactIndex.size()) {
 						List<Contribution<CategorizedDescriptor>> cs = result
 								.getProcessContributions(result.impactIndex.at(index));
-						var p = new Product(cs, dbName);
+						var p = new Product(cs, dbName, index);
 						list.add(p);
 					}
 				}
@@ -126,7 +128,7 @@ public class App {
 				c.amount = Double.valueOf(p.name);
 				l.add(c);
 			}
-			var p1 = new Product(l, "Product " + i);
+			var p1 = new Product(l, "Product", i);
 			products.add(p1);
 		}
 		return products;

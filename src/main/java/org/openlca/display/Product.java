@@ -17,20 +17,26 @@ public class Product {
 	static ComparisonCriteria criteria;
 	private double width;
 	private Point startEdge;
-
+	private int impactIndex;
+	
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
 	}
 
-	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
+	public Product(List<Contribution<CategorizedDescriptor>> l, String n, int impactIndex) {
 		name = n;
 		list = new ArrayList<>();
 		Result.criteria = criteria;
+		this.impactIndex = impactIndex;
 		for (Contribution<CategorizedDescriptor> contribution : l) {
 			list.add(new Result(contribution));
 		}
 	}
 
+	public int getImpactIndex() {
+		return impactIndex;
+	}
+	
 	public static void updateComparisonCriteria(ComparisonCriteria c) {
 		criteria = c;
 		Result.criteria = c;
