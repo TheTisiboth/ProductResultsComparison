@@ -1,7 +1,12 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -47,7 +52,7 @@ public class ProductDisplay {
 	private Image cache;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
-	private List<List<Category>> categoriesList;
+	private Map<ComparisonCriteria,List<List<Category>>> categoriesMap;
 	private Combo categoriesValuesSelection;
 	private Color chosenColor;
 
@@ -65,7 +70,8 @@ public class ProductDisplay {
 		maxCriteriaValue = 0;
 		minCriteriaValue = 0;
 		comparisonCriteria = config.comparisonCriteria;
-		categoriesList = new ArrayList<>();
+		categoriesMap = new HashMap<>();
+		categoriesMap.put(comparisonCriteria, new ArrayList<>());
 		sortProducts();
 	}
 
@@ -102,7 +108,7 @@ public class ProductDisplay {
 		row1.setLayout(new RowLayout());
 
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(true, row2); // Costly painting method, so we cache it first
+		cachedPaint(row2, cache); // Costly painting method, so we cache it first
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 
 		createComparisonCriteriaCombo(row1, row2);
@@ -132,9 +138,8 @@ public class ProductDisplay {
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 					origin = new Point(0, 0);
 					// We reset the categories
-					categoriesList = new ArrayList<>();
 					sortProducts();
-					redraw(true, row2);
+					redraw(row2);
 					triggerSelectValueComboSelectionListener(true);
 				}
 			}
@@ -178,19 +183,19 @@ public class ProductDisplay {
 				} else {
 					RGB rgb = chosenColor.getRGB();
 					// Reset categories colors to default (just for the one which where changed)
-					categoriesList.stream()
+					categoriesMap.get(comparisonCriteria).stream()
 							.forEach(categories -> categories.stream().filter(category -> category.getRgb().equals(rgb))
 									.forEach(category -> category.resetDefaultRGB()));
 					String selectedText = categoriesValuesSelection.getText();
 					if (!"".equals(selectedText)) {
 						double selectedValue = Double.valueOf(selectedText).doubleValue();
 						// Set a chosen color to the chosen categories
-						categoriesList.stream()
+						categoriesMap.get(comparisonCriteria).stream()
 								.forEach(categories -> categories.stream()
 										.filter(category -> selectedValue == category.getTargetValue())
 										.forEach(category -> category.setRgb(rgb)));
 					}
-					redraw(false, row2);
+					redraw(row2);
 				}
 			}
 		});
@@ -202,7 +207,7 @@ public class ProductDisplay {
 	 * @param combo The Combo component
 	 */
 	private void setItemSelectValueCombo(Combo combo) {
-		List<Double> categoriesValues = categoriesList.stream()
+		List<Double> categoriesValues = categoriesMap.get(comparisonCriteria).stream()
 				.flatMap(categories -> categories.stream().map(category -> category.getTargetValue())).distinct()
 				.sorted().collect(Collectors.toList());
 		List<String> values = categoriesValues.stream().map(e -> e.toString()).collect(Collectors.toList());
@@ -263,12 +268,12 @@ public class ProductDisplay {
 	 * @param recompute Tell if we have to recompute the categories. If false, then
 	 *                  we just redraw the whole objects
 	 */
-	private void redraw(boolean recompute, Composite composite) {
+	private void redraw( Composite composite) {
 		screenSize = composite.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
 		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(recompute, composite); // Costly painting, so we cache it; Called one time at the beginning
+		cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
 		canvas.redraw();
 	}
 
@@ -281,17 +286,17 @@ public class ProductDisplay {
 	 *                  we just redraw the whole objects
 	 * @param composite The parent component
 	 */
-	private void cachedPaint(boolean recompute, Composite composite) {
+	private void cachedPaint(Composite composite, Image cache) {
 		GC gc = new GC(cache);
-		if (recompute) {
-			categoriesList = new ArrayList<>();
-		}
+//		if (recompute) {
+//			categoriesMap.put(comparisonCriteria,new ArrayList<>());
+//		}
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			handleProduct(gc, maxProductWidth, rectEdge, productIndex, recompute);
+			handleProduct(gc, maxProductWidth, rectEdge, productIndex);
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
@@ -308,7 +313,7 @@ public class ProductDisplay {
 	 * @param recompute       Tell if we have to recompute the categories. If false,
 	 *                        then we just redraw the whole objects
 	 */
-	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, boolean recompute) {
+	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex) {
 		var p = products.get(productIndex);
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
@@ -317,7 +322,7 @@ public class ProductDisplay {
 		textPos.y += 20;
 		gc.drawText("Impact index: " + p.getImpactIndex(), textPos.x, textPos.y);
 
-		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, recompute);
+		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
 			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
@@ -331,6 +336,12 @@ public class ProductDisplay {
 		p.setBounds(rectEdge, productWidth);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
+	}
+
+	public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
+
+		Map<Object, Boolean> seen = new ConcurrentHashMap<>();
+		return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
 	}
 
 	/**
@@ -349,15 +360,20 @@ public class ProductDisplay {
 	 * @param gap
 	 * @return
 	 */
-	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
-			boolean recompute) {
+	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth) {
 		List<Category> categories = null;
-		if (recompute) {
-			// Get all distinct values, create a category for each of them
-			categories = p.getList().stream().map(r -> r.getValue()).distinct()
-					.map(v -> new Category(v, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
+		// Get all distinct values, create a category for each of them
+		var list = categoriesMap.get(comparisonCriteria);
+		if (list == null) {
+			list = new ArrayList<>();
+		}
+		if (list.isEmpty() || list.size() < productIndex + 1) {
+
+			categories = p.getList().stream().filter(distinctByKey(r -> r.getValue()))
+					.map(r -> new Category(r, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
+
 		} else {
-			categories = categoriesList.get(productIndex);
+			categories = list.get(productIndex);
 		}
 		final int categoriesAmount = categories.size();
 		double gap = ((double) productWidth / categoriesAmount);
@@ -370,7 +386,6 @@ public class ProductDisplay {
 			chunkSize = (int) Math.ceil(1 / gap);
 			gapEnoughBig = false;
 		}
-
 		// Sum all the distincts values
 		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
 		Point start = null;
@@ -407,10 +422,13 @@ public class ProductDisplay {
 				start = end;
 				chunk = newChunk;
 			}
+			System.out.println(category);
 		}
-		if (recompute) {
-			categoriesList.add(categories);
+		if (list.size() < productIndex + 1) {
+			list.add(productIndex, categories);
+			categoriesMap.put(comparisonCriteria, list);
 		}
+
 		return newProductWidth;
 	}
 
@@ -474,12 +492,13 @@ public class ProductDisplay {
 	 */
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
-			var categoryMap = categoriesList.get(productIndex);
+			var categoryMap = categoriesMap.get(comparisonCriteria).get(productIndex);
 			for (Category category : categoryMap) {
 				if (category.isLinkDrawable()) {
-					var nextMap = categoriesList.get(productIndex + 1);
+					var nextMap = categoriesMap.get(comparisonCriteria).get(productIndex + 1);
 					// We search for a category that has the same color
-					var optional = nextMap.stream().filter(next -> next.getRgb().equals(category.getRgb())).findFirst();
+					var optional = nextMap.stream().filter(next -> next.getTargetValue() == category.getTargetValue())
+							.findFirst();
 					if (optional.isPresent()) {
 						var linkedCategory = optional.get();
 						var startPoint = category.getStartingLinkPoint();
@@ -556,7 +575,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(false, composite);
+				redraw(composite);
 			}
 		});
 	}

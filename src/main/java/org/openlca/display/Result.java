@@ -20,6 +20,10 @@ public class Result {
 		endPoint = null;
 	}
 
+	public double getAmount() {
+		return contribution.amount;
+	}
+
 	public double getValue() {
 		try {
 			switch (criteria) {

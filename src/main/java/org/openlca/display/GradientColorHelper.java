@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 public class GradientColorHelper {
 
@@ -43,10 +44,10 @@ public class GradientColorHelper {
 		if (value < 0 || value > 1) {
 			return null;
 		}
-//		long seed =  (long) ( value*1000000000.0);
-//		Random rand = new Random(seed);
-//		var v = rand.nextDouble()%1.0;
-		Double d = value * factor;
+		long seed =  (long) ( value*1000000000.0);
+		Random rand = new Random(seed);
+		var v = rand.nextDouble()%1.0;
+		Double d = v * factor;
 		int index = d.intValue();
 		if (index == factor) {
 			index--;

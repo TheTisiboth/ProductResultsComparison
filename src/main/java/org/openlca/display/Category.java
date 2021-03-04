@@ -8,23 +8,21 @@ public class Category {
 	private int startPixel;
 	private int endPixel;
 	private RGB rgb;
-	private double value;
-	private double normalizedValue;
 	private Point startingLinksPoint;
 	private Point endingLinkPoint;
 	private boolean isDrawable;
 	private Config config;
 	private double min;
 	private double max;
+	private Result result;
 
-	
-	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx ) {
+	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
 		this.startingLinksPoint = startingLinksPoint;
 		this.endingLinkPoint = endingLinkPoint;
 		startPixel = startX;
 		endPixel = endx;
 	}
-	
+
 	public Point getStartingLinkPoint() {
 		return startingLinksPoint;
 	}
@@ -41,27 +39,34 @@ public class Category {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Category(double value, Config c, double min, double max) {
+	public Category(Result r, Config c, double min, double max) {
 		this.min = min;
 		this.max = max;
-		this.value = value;
-		this.normalizedValue = value + Math.abs(min) + 1;
+		this.result = r;
 		isDrawable = true;
 		config = c;
 		rgb = computeRGB();
 	}
 
 	public double getTargetValue() {
-		return value;
+		return result.getValue();
 	}
 
 	public double getNormalizedValue() {
-		return normalizedValue;
+		return result.getValue() + Math.abs(min) + 1;
+	}
+
+	public double getAmount() {
+		return result.getAmount();
+	}
+
+	public double getNormalizedAmount() {
+		return result.getAmount() + Math.abs(min) + 1;
 	}
 
 	private RGB computeRGB() {
 		double percentage = 0;
-
+		var value = result.getValue();
 		try {
 			percentage = (((value - min) * 100) / (max - min)) / 100;
 		} catch (Exception e) {
@@ -116,7 +121,7 @@ public class Category {
 	}
 
 	public String toString() {
-		return rgb + " / " + value + " / [ " + startPixel + "; " + endPixel + " ]";
+		return rgb + " / " + result.getValue() + " / [ " + startPixel + "; " + endPixel + " ]";
 	}
 
 }
