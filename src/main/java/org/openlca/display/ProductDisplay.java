@@ -55,6 +55,7 @@ public class ProductDisplay {
 	private Map<ComparisonCriteria, List<List<Category>>> categoriesMap;
 	private Combo categoriesValuesSelection;
 	private Color chosenColor;
+	private ScrollBar vBar;
 
 	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
 		this.shell = shell;
@@ -98,7 +99,7 @@ public class ProductDisplay {
 		/**
 		 * VBar component
 		 */
-		var vBar = canvas.getVerticalBar();
+		vBar = canvas.getVerticalBar();
 		vBar.setMaximum(theoreticalScreenHeight);
 		vBar.setMinimum(0);
 
@@ -139,10 +140,10 @@ public class ProductDisplay {
 					}
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 					origin = new Point(0, 0);
+					vBar.setSelection(origin.y);
 					// We reset the categories
 					sortProducts();
 					getCategories();
-//					redraw(row2, true);
 					triggerSelectValueComboSelectionListener(true);
 				}
 			}
