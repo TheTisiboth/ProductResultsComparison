@@ -49,10 +49,10 @@ public class ProductDisplay {
 	private final int theoreticalScreenHeight;
 	private ComparisonCriteria comparisonCriteria;
 	private Canvas canvas;
-	private Image cache;
+	private Map<ComparisonCriteria, Image> cacheMap;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
-	private Map<ComparisonCriteria,List<List<Category>>> categoriesMap;
+	private Map<ComparisonCriteria, List<List<Category>>> categoriesMap;
 	private Combo categoriesValuesSelection;
 	private Color chosenColor;
 
@@ -60,7 +60,6 @@ public class ProductDisplay {
 		this.shell = shell;
 		this.products = products;
 		this.config = config;
-		screenSize = shell.getSize();
 		origin = new Point(0, 0);
 		xMargin = 200;
 		productHeight = 30;
@@ -72,6 +71,7 @@ public class ProductDisplay {
 		comparisonCriteria = config.comparisonCriteria;
 		categoriesMap = new HashMap<>();
 		categoriesMap.put(comparisonCriteria, new ArrayList<>());
+		cacheMap = new HashMap<>();
 		sortProducts();
 	}
 
@@ -107,8 +107,7 @@ public class ProductDisplay {
 
 		row1.setLayout(new RowLayout());
 
-		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(row2, cache); // Costly painting method, so we cache it first
+		redraw(row2, true);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 
 		createComparisonCriteriaCombo(row1, row2);
@@ -139,7 +138,7 @@ public class ProductDisplay {
 					origin = new Point(0, 0);
 					// We reset the categories
 					sortProducts();
-					redraw(row2);
+					redraw(row2, false);
 					triggerSelectValueComboSelectionListener(true);
 				}
 			}
@@ -195,7 +194,7 @@ public class ProductDisplay {
 										.filter(category -> selectedValue == category.getTargetValue())
 										.forEach(category -> category.setRgb(rgb)));
 					}
-					redraw(row2);
+					redraw(row2, true);
 				}
 			}
 		});
@@ -268,12 +267,24 @@ public class ProductDisplay {
 	 * @param recompute Tell if we have to recompute the categories. If false, then
 	 *                  we just redraw the whole objects
 	 */
-	private void redraw( Composite composite) {
-		screenSize = composite.getSize();
+	private void redraw(Composite composite, boolean recompute) {
+		screenSize = shell.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
-		cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-		cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
+		Image cache = null;
+		if (recompute) { // If we recompute, we draw a brand new Image
+			cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
+			cacheMap.put(comparisonCriteria, cache);
+			cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
+		} else {
+			// Otherwise, we take a cached Image
+			cache = cacheMap.get(comparisonCriteria);
+			if (cache == null) {
+				cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
+				cacheMap.put(comparisonCriteria, cache);
+				cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
+			}
+		}
 		canvas.redraw();
 	}
 
@@ -288,9 +299,6 @@ public class ProductDisplay {
 	 */
 	private void cachedPaint(Composite composite, Image cache) {
 		GC gc = new GC(cache);
-//		if (recompute) {
-//			categoriesMap.put(comparisonCriteria,new ArrayList<>());
-//		}
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
@@ -368,10 +376,8 @@ public class ProductDisplay {
 			list = new ArrayList<>();
 		}
 		if (list.isEmpty() || list.size() < productIndex + 1) {
-
 			categories = p.getList().stream().filter(distinctByKey(r -> r.getValue()))
 					.map(r -> new Category(r, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
-
 		} else {
 			categories = list.get(productIndex);
 		}
@@ -575,7 +581,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(composite);
+				redraw(composite, true);
 			}
 		});
 	}
@@ -589,7 +595,7 @@ public class ProductDisplay {
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				e.gc.drawImage(cache, origin.x, origin.y);
+				e.gc.drawImage(cacheMap.get(comparisonCriteria), origin.x, origin.y);
 			}
 		});
 	}
