@@ -134,11 +134,15 @@ public class ProductDisplay {
 			public void widgetSelected(SelectionEvent e) {
 				ComparisonCriteria newCriteria = ComparisonCriteria.getCriteria(c.getText());
 				if (newCriteria != comparisonCriteria) {
+					if (categoriesValuesSelection.getSelectionIndex() != -1) {
+						resetDefaultColorCategories();
+					}
 					comparisonCriteria = ComparisonCriteria.getCriteria(c.getText());
 					origin = new Point(0, 0);
 					// We reset the categories
 					sortProducts();
-					redraw(row2, false);
+					getCategories();
+//					redraw(row2, true);
 					triggerSelectValueComboSelectionListener(true);
 				}
 			}
@@ -182,9 +186,7 @@ public class ProductDisplay {
 				} else {
 					RGB rgb = chosenColor.getRGB();
 					// Reset categories colors to default (just for the one which where changed)
-					categoriesMap.get(comparisonCriteria).stream()
-							.forEach(categories -> categories.stream().filter(category -> category.getRgb().equals(rgb))
-									.forEach(category -> category.resetDefaultRGB()));
+					resetDefaultColorCategories();
 					String selectedText = categoriesValuesSelection.getText();
 					if (!"".equals(selectedText)) {
 						double selectedValue = Double.valueOf(selectedText).doubleValue();
@@ -194,10 +196,18 @@ public class ProductDisplay {
 										.filter(category -> selectedValue == category.getTargetValue())
 										.forEach(category -> category.setRgb(rgb)));
 					}
-					redraw(row2, true);
+
 				}
+				redraw(row2, true);
 			}
 		});
+	}
+
+	public void resetDefaultColorCategories() {
+		RGB rgb = chosenColor.getRGB();
+		// Reset categories colors to default (just for the one which where changed)
+		categoriesMap.get(comparisonCriteria).stream().forEach(categories -> categories.stream()
+				.filter(category -> category.getRgb().equals(rgb)).forEach(category -> category.resetDefaultRGB()));
 	}
 
 	/**
@@ -303,11 +313,30 @@ public class ProductDisplay {
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
+		var categories = getCategories();
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			handleProduct(gc, maxProductWidth, rectEdge, productIndex);
+			handleProduct(gc, maxProductWidth, rectEdge, productIndex, categories.get(productIndex));
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
+	}
+
+	private List<List<Category>> getCategories() {
+		// Get all distinct values, create a category for each of them
+		var list = categoriesMap.get(comparisonCriteria);
+		if (list == null) {
+			list = new ArrayList<>();
+		}
+		if (list.isEmpty()) {
+			list = products.stream()
+					.map(p -> p.getList().stream().filter(distinctByKey(r -> r.getValue()))
+							.map(r -> new Category(r, config, minCriteriaValue, maxCriteriaValue))
+							.collect(Collectors.toList()))
+					.collect(Collectors.toList());
+			categoriesMap.put(comparisonCriteria, list);
+		}
+
+		return list;
 	}
 
 	/**
@@ -318,10 +347,12 @@ public class ProductDisplay {
 	 * @param maxProductWidth The maximal width for a product
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
+	 * @param categoriesList
 	 * @param recompute       Tell if we have to recompute the categories. If false,
 	 *                        then we just redraw the whole objects
 	 */
-	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex) {
+	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex,
+			List<Category> categoriesList) {
 		var p = products.get(productIndex);
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
@@ -330,7 +361,7 @@ public class ProductDisplay {
 		textPos.y += 20;
 		gc.drawText("Impact index: " + p.getImpactIndex(), textPos.x, textPos.y);
 
-		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth);
+		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, categoriesList);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
 			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
@@ -360,6 +391,7 @@ public class ProductDisplay {
 	 * @param productIndex   The index of the current product
 	 * @param p              The current product
 	 * @param productWidth   The product width
+	 * @param categories
 	 * @param recompute      Tell if we have to recompute the categories. If false,
 	 *                       then we just redraw the whole objects
 	 * @param drawSeparation
@@ -368,19 +400,8 @@ public class ProductDisplay {
 	 * @param gap
 	 * @return
 	 */
-	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth) {
-		List<Category> categories = null;
-		// Get all distinct values, create a category for each of them
-		var list = categoriesMap.get(comparisonCriteria);
-		if (list == null) {
-			list = new ArrayList<>();
-		}
-		if (list.isEmpty() || list.size() < productIndex + 1) {
-			categories = p.getList().stream().filter(distinctByKey(r -> r.getValue()))
-					.map(r -> new Category(r, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList());
-		} else {
-			categories = list.get(productIndex);
-		}
+	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
+			List<Category> categories) {
 		final int categoriesAmount = categories.size();
 		double gap = ((double) productWidth / categoriesAmount);
 		int chunk = -1, chunkSize = 0;
@@ -397,6 +418,7 @@ public class ProductDisplay {
 		Point start = null;
 		var newChunk = 0;
 		System.out.println();
+		System.out.println("Product" + productIndex + " : " + p.getList().size() + " contribution results");
 		System.out.println("Product " + productIndex + " : " + categoriesAmount + " categories");
 		for (var categoriesIndex = 0; categoriesIndex < categories.size(); categoriesIndex++) {
 			if (!gapEnoughBig) {
@@ -428,13 +450,7 @@ public class ProductDisplay {
 				start = end;
 				chunk = newChunk;
 			}
-			System.out.println(category);
 		}
-		if (list.size() < productIndex + 1) {
-			list.add(productIndex, categories);
-			categoriesMap.put(comparisonCriteria, list);
-		}
-
 		return newProductWidth;
 	}
 
