@@ -1,6 +1,7 @@
 package org.openlca.display;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,8 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.ModifyEvent;
+import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -36,6 +39,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
+import org.openlca.core.results.ContributionResult;
 
 public class ProductDisplay {
 	private Shell shell;
@@ -46,26 +50,32 @@ public class ProductDisplay {
 	private final int xMargin;
 	private final int productHeight;
 	private final int gapBetweenProduct;
-	private final int theoreticalScreenHeight;
+	private int theoreticalScreenHeight;
 	private ComparisonCriteria comparisonCriteria;
 	private Canvas canvas;
 	private Map<ComparisonCriteria, Image> cacheMap;
 	private double maxCriteriaValue;
 	private double minCriteriaValue;
-	private Map<ComparisonCriteria, List<List<Category>>> categoriesMap;
+	private Map<ComparisonCriteria, List<List<Cell>>> categoriesMap;
 	private Combo categoriesValuesSelection;
+	private Combo selectCategory;
 	private Color chosenColor;
 	private ScrollBar vBar;
+	private ContributionResult contributionResult;
+	private final String dbName;
+	private double cutOff;
 
-	public ProductDisplay(Shell shell, final List<Product> products, Config config) {
+	public ProductDisplay(Shell shell, Config config, ContributionResult result, String dbName) {
+		this.dbName = dbName;
 		this.shell = shell;
-		this.products = products;
 		this.config = config;
+		products = new ArrayList<>();
+		contributionResult = result;
 		origin = new Point(0, 0);
 		xMargin = 200;
 		productHeight = 30;
 		gapBetweenProduct = 300;
-		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
+		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 4;
 		canvas = null;
 		maxCriteriaValue = 0;
 		minCriteriaValue = 0;
@@ -73,7 +83,7 @@ public class ProductDisplay {
 		categoriesMap = new HashMap<>();
 		categoriesMap.put(comparisonCriteria, new ArrayList<>());
 		cacheMap = new HashMap<>();
-		sortProducts();
+		cutOff = 0.15;
 	}
 
 	/**
@@ -110,10 +120,74 @@ public class ProductDisplay {
 
 		redraw(row2, true);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
-
-		createComparisonCriteriaCombo(row1, row2);
-		createSelectValueCombo(row1, row2);
+		createChoseImpactCategories(row1, row2);
+		createAgregateCombo(row1);
+//		createComparisonCriteriaCombo(row1, row2);
+//		createSelectValueCombo(row1, row2);
 		createColorPicker(row1);
+		createSelectedCategory(row1);
+
+	}
+
+	private void createChoseImpactCategories(Composite row1, Composite row2) {
+		MultipleSelectionCombo msc = new MultipleSelectionCombo(row1, SWT.BORDER);
+		// TODO
+		// Handle impact with same names
+		var indexMap = contributionResult.impactIndex.content().stream().filter(distinctByKey(index -> index.name))
+				.collect(Collectors.toMap(index -> index.name, index -> index));
+		contributionResult.impactIndex.content().stream().forEach(i -> msc.add(i.name));
+		msc.setSize(500, 500);
+
+		msc.addModifyListener(new ModifyListener() {
+
+			@Override
+			public void modifyText(ModifyEvent e) {
+				var t = msc.getSelections();
+				products = new ArrayList<>();
+				Arrays.stream(t).forEach(impactName -> {
+					var cs = contributionResult.getProcessContributions(indexMap.get(impactName));
+					var p = new Product(cs, impactName);
+					products.add(p);
+				});
+
+				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size());
+				sortProducts();
+				getCategories();
+				triggerSelectValueComboSelectionListener(selectCategory, true);
+				redraw(row2, true);
+			}
+		});
+
+	}
+
+	private void createAgregateCombo(Composite row1) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Agregate : ");
+		final Combo c = new Combo(row1, SWT.READ_ONLY);
+		c.setBounds(50, 50, 150, 65);
+
+		String values[] = { "", "Category", "Location" };
+		c.setItems(values);
+	}
+
+	private void createSelectedCategory(Composite row1) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Select Category : ");
+		selectCategory = new Combo(row1, SWT.READ_ONLY);
+		selectCategory.setBounds(50, 50, 400, 65);
+		selectCategory.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				if (selectCategory.getSelectionIndex() == -1) {
+					var list = products.stream()
+							.flatMap(p -> p.getList().stream().filter(r -> r.getContribution().item.category != null)
+									.map(r -> r.getContribution().item.category.toString()).distinct())
+							.collect(Collectors.toList());
+					list.add(0, "");
+					selectCategory.setItems(list.toArray(String[]::new));
+				}
+			}
+
+		});
 	}
 
 	/**
@@ -144,7 +218,7 @@ public class ProductDisplay {
 					// We reset the categories
 					sortProducts();
 					getCategories();
-					triggerSelectValueComboSelectionListener(true);
+					triggerSelectValueComboSelectionListener(categoriesValuesSelection, true);
 				}
 			}
 		});
@@ -155,15 +229,15 @@ public class ProductDisplay {
 	 * 
 	 * @param deselect Indicate if we deselect the selected value of the combo
 	 */
-	private void triggerSelectValueComboSelectionListener(boolean deselect) {
+	private void triggerSelectValueComboSelectionListener(Combo combo, boolean deselect) {
 		if (deselect) {
-			categoriesValuesSelection.deselectAll();
+			combo.deselectAll();
 		}
 		Event event = new Event();
-		event.widget = categoriesValuesSelection;
-		event.display = categoriesValuesSelection.getDisplay();
+		event.widget = combo;
+		event.display = combo.getDisplay();
 		event.type = SWT.Selection;
-		categoriesValuesSelection.notifyListeners(SWT.Selection, event);
+		combo.notifyListeners(SWT.Selection, event);
 	}
 
 	/**
@@ -256,7 +330,7 @@ public class ProductDisplay {
 					chosenColor.dispose();
 					chosenColor = new Color(composite.getDisplay(), rgb);
 					colorLabel.setBackground(chosenColor);
-					triggerSelectValueComboSelectionListener(false);
+//					triggerSelectValueComboSelectionListener(categoriesValuesSelection, false);
 				}
 			}
 		});
@@ -315,27 +389,27 @@ public class ProductDisplay {
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		var categories = getCategories();
+		var maxAmount = categories.stream().mapToDouble(categoryList -> categoryList.stream()
+				.map(c -> c.getNormalizedAmount()).reduce(0.0, (subtotal, amount) -> subtotal + amount)).max();
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			handleProduct(gc, maxProductWidth, rectEdge, productIndex, categories.get(productIndex));
+			handleProduct(gc, maxProductWidth, rectEdge, productIndex, categories.get(productIndex), maxAmount.getAsDouble());
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
 	}
 
-	private List<List<Category>> getCategories() {
+	private List<List<Cell>> getCategories() {
 		// Get all distinct values, create a category for each of them
 		var list = categoriesMap.get(comparisonCriteria);
 		if (list == null) {
 			list = new ArrayList<>();
 		}
-		if (list.isEmpty()) {
-			list = products.stream()
-					.map(p -> p.getList().stream().filter(distinctByKey(r -> r.getValue()))
-							.map(r -> new Category(r, config, minCriteriaValue, maxCriteriaValue))
-							.collect(Collectors.toList()))
-					.collect(Collectors.toList());
-			categoriesMap.put(comparisonCriteria, list);
-		}
+
+		list = products.stream()
+				.map(p -> p.getList().stream().filter(r -> !r.isContributionEmpty())
+						.map(r -> new Cell(r, config, minCriteriaValue, maxCriteriaValue)).collect(Collectors.toList()))
+				.collect(Collectors.toList());
+		categoriesMap.put(comparisonCriteria, list);
 
 		return list;
 	}
@@ -349,20 +423,21 @@ public class ProductDisplay {
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
 	 * @param categoriesList
+	 * @param maxAmount 
 	 * @param recompute       Tell if we have to recompute the categories. If false,
 	 *                        then we just redraw the whole objects
 	 */
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex,
-			List<Category> categoriesList) {
+			List<Cell> categoriesList, double maxAmount) {
 		var p = products.get(productIndex);
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText(p.getName(), textPos.x, textPos.y);
-		textPos.y += 20;
-		gc.drawText("Impact index: " + p.getImpactIndex(), textPos.x, textPos.y);
+		gc.drawText(dbName, textPos.x, textPos.y);
+		textPos.y += 25;
+		gc.drawText("Impact : " + p.getName(), textPos.x, textPos.y);
 
-		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, categoriesList);
+		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, categoriesList, maxAmount);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
 			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
@@ -393,6 +468,7 @@ public class ProductDisplay {
 	 * @param p              The current product
 	 * @param productWidth   The product width
 	 * @param categories
+	 * @param maxAmount 
 	 * @param recompute      Tell if we have to recompute the categories. If false,
 	 *                       then we just redraw the whole objects
 	 * @param drawSeparation
@@ -402,8 +478,12 @@ public class ProductDisplay {
 	 * @return
 	 */
 	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
-			List<Category> categories) {
+			List<Cell> categories, double maxAmount) {
 		final int categoriesAmount = categories.size();
+		double maxAmountCurrentProduct = p.max();
+		// Sum all the distincts values
+		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
+		productWidth = (int) (productWidth * (resultsSum/maxAmount));
 		double gap = ((double) productWidth / categoriesAmount);
 		int chunk = -1, chunkSize = 0;
 		boolean gapEnoughBig = true;
@@ -414,8 +494,7 @@ public class ProductDisplay {
 			chunkSize = (int) Math.ceil(1 / gap);
 			gapEnoughBig = false;
 		}
-		// Sum all the distincts values
-		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
+
 		Point start = null;
 		var newChunk = 0;
 		System.out.println();
@@ -473,7 +552,7 @@ public class ProductDisplay {
 	 * @param categoryWidth The width of the category
 	 * @return The end point of the category
 	 */
-	private Point computeEndCategory(Point start, Category category, int categoryWidth) {
+	private Point computeEndCategory(Point start, Cell category, int categoryWidth) {
 		var end = new Point(start.x + categoryWidth, start.y);
 		var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
 		var endingPoint = new Point(startingPoint.x, start.y - 2);
@@ -516,17 +595,16 @@ public class ProductDisplay {
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
 			var categoryMap = categoriesMap.get(comparisonCriteria).get(productIndex);
-			for (Category category : categoryMap) {
+			for (Cell category : categoryMap) {
 				if (category.isLinkDrawable()) {
 					var nextMap = categoriesMap.get(comparisonCriteria).get(productIndex + 1);
-					// We search for a category that has the same color
-					var optional = nextMap.stream().filter(next -> next.getTargetValue() == category.getTargetValue())
-							.findFirst();
+					// We search for a category that has the same process
+					var optional = nextMap.stream().filter(next -> next.getResult().getContribution().item
+							.equals(category.getResult().getContribution().item)).findFirst();
 					if (optional.isPresent()) {
 						var linkedCategory = optional.get();
 						var startPoint = category.getStartingLinkPoint();
 						var endPoint = linkedCategory.getEndingLinkPoint();
-//						drawLine(gc, startPoint, endPoint, linkedCategory.getRgb(), SWT.COLOR_BLACK);
 						if (config.useBezierCurve) {
 							drawBezierCurve(gc, startPoint, endPoint, linkedCategory.getRgb());
 						} else {

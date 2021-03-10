@@ -18,6 +18,7 @@ import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
 import org.openlca.julia.Julia;
+import org.openlca.util.Pair;
 
 public class App {
 	private static void println(String s) {
@@ -31,22 +32,22 @@ public class App {
 
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
-		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE| SWT.MAX);
+		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE | SWT.MAX);
 		shell.setText("Product comparison GUI");
 		shell.setLayout(new GridLayout());
-		List<Product> products;
+		ContributionResult result = null;
+		String dbName = "ecoinvent_371_cutoff_unit_20210104";
 		if (!config.useFakeResults) {
 //			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104", "exiobase3_monetary_20181212", "needs_18",
 //					"ideaolcaelemnames_final", "evah_pigment_database_20190314", "usda_1901009" };
 
-			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104" };
 			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
-			products = getContributionResults(dbNames, impactIndexes, config);
+			result = getContributionResults(dbName, config);
 //			products = getHighestContributionResults(dbNames, config);
-		} else {
-			products = createProducts(5, config);
+//		} else {
+//			result = createProducts(5, config);
 		}
-		new ProductDisplay(shell, products, config).display();
+		new ProductDisplay(shell, config, result, dbName).display();
 		shell.open();
 		while (!shell.isDisposed()) {
 			if (!display.readAndDispatch()) {
@@ -58,7 +59,7 @@ public class App {
 	}
 
 	private static List<Product> getHighestContributionResults(String dbNames[], Config config) {
-		var list = new ArrayList<Product>();
+		var<Product> list = new ArrayList<Product>();
 		println("Connect to databases ");
 		Product.criteria = config.comparisonCriteria;
 		for (String dbName : dbNames) {
@@ -83,42 +84,39 @@ public class App {
 					}
 				}
 				List<Contribution<CategorizedDescriptor>> cs = result.getProcessContributions(impact);
-				var p = new Product(cs, dbName,impactIndex);
+				var p = new Product(cs, dbName);
 				list.add(p);
 			}
 		}
 		return list;
 	}
 
-	private static List<Product> getContributionResults(String dbNames[], int impactIndexes[], Config config) {
-		var list = new ArrayList<Product>();
+	private static ContributionResult getContributionResults(String dbName, Config config) {
 		println("Connect to databases ");
 		Product.criteria = config.comparisonCriteria;
-		for (String dbName : dbNames) {
-			try (var db = DerbyDatabase.fromDataDir(dbName)) {
-				var techIndex = TechIndex.unlinkedOf(db);
-				var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
-				var result = ContributionResult.of(db, data);
-				for (int index : impactIndexes) {
-					if (index > 0 && index < result.impactIndex.size()) {
-						List<Contribution<CategorizedDescriptor>> cs = result
-								.getProcessContributions(result.impactIndex.at(index));
-						var p = new Product(cs, dbName, index);
-						list.add(p);
-					}
-				}
-			}
+		ContributionResult result = null;
+
+		try (var db = DerbyDatabase.fromDataDir(dbName)) {
+			var techIndex = TechIndex.unlinkedOf(db);
+			var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
+			result = ContributionResult.of(db, data);
+
 		}
-		return list;
+		return result;
 	}
 
-	private static List<Product> createProducts(int productsAmount, Config config) {
+	private static Pair<ImpactIndex, List<Product>> createProducts(int productsAmount, Config config) {
 		// Create random numbers, in order to be the product results
 		Random rand = new Random();
+		var impactIndex = new ImpactIndex();
 
 		List<Product> products = new ArrayList<>();
 		Product.criteria = config.comparisonCriteria;
 		for (int i = 0; i < productsAmount; i++) {
+			var impactDescriptor = new ImpactDescriptor();
+			impactDescriptor.id = i;
+			impactDescriptor.name = "Impact Descriptor " + i;
+			impactIndex.put(impactDescriptor);
 			List<Contribution<CategorizedDescriptor>> l = new ArrayList<>();
 			for (int j = 0; j < config.NB_Product_Results; j++) {
 				Contribution<CategorizedDescriptor> c = new Contribution<>();
@@ -128,9 +126,9 @@ public class App {
 				c.amount = Double.valueOf(p.name);
 				l.add(c);
 			}
-			var p1 = new Product(l, "Product", i);
+			var p1 = new Product(l, "Product");
 			products.add(p1);
 		}
-		return products;
+		return new Pair<ImpactIndex, List<Product>>(impactIndex, products);
 	}
 }

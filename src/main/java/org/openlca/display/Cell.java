@@ -3,7 +3,7 @@ package org.openlca.display;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 
-public class Category {
+public class Cell {
 
 	private int startPixel;
 	private int endPixel;
@@ -39,13 +39,17 @@ public class Category {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Category(Result r, Config c, double min, double max) {
+	public Cell(Result r, Config c, double min, double max) {
 		this.min = min;
 		this.max = max;
 		this.result = r;
 		isDrawable = true;
 		config = c;
 		rgb = computeRGB();
+	}
+	
+	public Result getResult() {
+		return result;
 	}
 
 	public double getTargetValue() {
