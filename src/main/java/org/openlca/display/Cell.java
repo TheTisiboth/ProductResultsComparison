@@ -2,6 +2,8 @@ package org.openlca.display;
 
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
+import org.openlca.core.results.Contribution;
 
 public class Cell {
 
@@ -11,9 +13,9 @@ public class Cell {
 	private Point startingLinksPoint;
 	private Point endingLinkPoint;
 	private boolean isDrawable;
-	private Config config;
-	private double min;
-	private double max;
+	static Config config;
+	private long min;
+	private long max;
 	private Result result;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
@@ -39,15 +41,14 @@ public class Cell {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Cell(Result r, Config c, double min, double max) {
+	public Cell(Contribution<CategorizedDescriptor> contribution, long min, long max) {
 		this.min = min;
 		this.max = max;
-		this.result = r;
+		this.result = new Result(contribution);
 		isDrawable = true;
-		config = c;
 		rgb = computeRGB();
 	}
-	
+
 	public Result getResult() {
 		return result;
 	}
@@ -70,9 +71,9 @@ public class Cell {
 
 	private RGB computeRGB() {
 		double percentage = 0;
-		var value = result.getValue();
+		var value = result.getContribution().item.id;
 		try {
-			percentage = (((value - min) * 100) / (max - min)) / 100;
+			percentage = (((value - min) * 100) / (max - min))/100.0 ;
 		} catch (Exception e) {
 			percentage = -1;
 		}
@@ -84,7 +85,7 @@ public class Cell {
 		}
 		RGB rgb = null;
 		if (config.useGradientColor) {
-			java.awt.Color tmpColor = GradientColorHelper.numberToColorPercentage((double) percentage);
+			java.awt.Color tmpColor = GradientColorHelper.numberToColorPercentage(percentage);
 			rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());
 		} else {
 			rgb = ColorPaletteHelper.getColor(percentage);

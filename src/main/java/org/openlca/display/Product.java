@@ -11,12 +11,14 @@ import org.openlca.core.results.Contribution;
 
 public class Product {
 
-	private ArrayList<Result> list;
+	private ArrayList<Cell> list;
 	private String name;
 	private boolean drawSeparationBetweenResults = false;
 	static ComparisonCriteria criteria;
+	static Config config;
 	private double width;
 	private Point startEdge;
+	private long min,max;
 
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
@@ -26,8 +28,10 @@ public class Product {
 		name = n;
 		list = new ArrayList<>();
 		Result.criteria = criteria;
+		max = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
+		min = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
 		for (Contribution<CategorizedDescriptor> contribution : l) {
-			list.add(new Result(contribution));
+			list.add(new Cell(contribution, min,max));
 		}
 	}
 
@@ -50,22 +54,25 @@ public class Product {
 		return name;
 	}
 
-	public ArrayList<Result> getList() {
+	public ArrayList<Cell> getList() {
 		return list;
 	}
 
-	public void setList(ArrayList<Result> list) {
+	public void setList(ArrayList<Cell> list) {
 		this.list = list;
 	}
 
-	public void setResult(int index, Result r) {
-		list.set(index, r);
-	}
+//	public void setResult(int index, Result r) {
+//		list.set(index, r);
+//	}
+//
+//	public Result getResult(int index) {
+//		return list.get(index);
+//	}
 
-	public Result getResult(int index) {
-		return list.get(index);
+	public long getCutoffSize(double cutOff) {
+		return list.stream().filter(c -> c.getAmount() < cutOff).count();
 	}
-
 	/**
 	 * Return the size of the product list, without counting the 0 or null values
 	 * 
@@ -75,11 +82,11 @@ public class Product {
 		try {
 			switch (criteria) {
 			case AMOUNT:
-				return (int) list.stream().filter(r -> r.getContribution().amount != 0.0).count();
+				return (int) list.stream().filter(r -> r.getResult().getContribution().amount != 0.0).count();
 			case CATEGORY:
-				return (int) list.stream().filter(r -> r.getContribution().item.category != null).count();
+				return (int) list.stream().filter(r -> r.getResult().getContribution().item.category != null).count();
 			case LOCATION:
-				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
+				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getResult().getContribution().item).location != null)
 						.count();
 			}
 		} catch (NullPointerException | NoSuchElementException e) {
@@ -89,45 +96,19 @@ public class Product {
 	}
 
 	public double min() {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return list.stream().mapToDouble(r -> r.getContribution().amount).min().getAsDouble();
-			case CATEGORY:
-				return list.stream().mapToDouble(r -> r.getContribution().item.category).min().getAsDouble();
-			case LOCATION:
-				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).min().getAsDouble();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
+		return min;
 	}
 
 	public double max() {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return list.stream().mapToDouble(r -> r.getContribution().amount).max().getAsDouble();
-			case CATEGORY:
-				return list.stream().mapToDouble(r -> r.getContribution().item.category).max().getAsDouble();
-			case LOCATION:
-				return list.stream().filter(r -> ((ProcessDescriptor) r.getContribution().item).location != null)
-						.mapToDouble(r -> ((ProcessDescriptor) r.getContribution().item).location).max().getAsDouble();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
+		return max;
 	}
 	
 
 	@Override
 	public String toString() {
 		String s = "[ ";
-		for (Result r : list) {
-			s += r.getContribution().item.toString() + ", ";
+		for (Cell r : list) {
+			s += r.getResult().getContribution().item.toString() + ", ";
 		}
 		s += " ]";
 		return s;
@@ -140,8 +121,8 @@ public class Product {
 		switch (criteria) {
 		case AMOUNT:
 			list.sort((r1, r2) -> {
-				double a1 = r1.getContribution().amount;
-				double a2 = r2.getContribution().amount;
+				double a1 = r1.getResult().getContribution().amount;
+				double a2 = r2.getResult().getContribution().amount;
 				if (a1 == 0.0 && a2 != 0.0) {
 					return -1;
 				} else if (a1 != 0.0 && a2 == 0.0) {
@@ -158,8 +139,8 @@ public class Product {
 			break;
 		case CATEGORY:
 			list.sort((r1, r2) -> {
-				Long c1 = ((ProcessDescriptor) r1.getContribution().item).category;
-				Long c2 = ((ProcessDescriptor) r2.getContribution().item).category;
+				Long c1 = ((ProcessDescriptor) r1.getResult().getContribution().item).category;
+				Long c2 = ((ProcessDescriptor) r2.getResult().getContribution().item).category;
 				if (c1 == null && c2 == null) {
 					return 0;
 				} else if (c1 == null && c2 != null) {
@@ -180,8 +161,8 @@ public class Product {
 		case LOCATION:
 			list.sort((r1, r2) -> {
 				try {
-					Long l1 = ((ProcessDescriptor) r1.getContribution().item).location;
-					Long l2 = ((ProcessDescriptor) r2.getContribution().item).location;
+					Long l1 = ((ProcessDescriptor) r1.getResult().getContribution().item).location;
+					Long l2 = ((ProcessDescriptor) r2.getResult().getContribution().item).location;
 					if (l1 == null && l2 == null) {
 						return 0;
 					} else if (l1 == null && l2 != null) {
