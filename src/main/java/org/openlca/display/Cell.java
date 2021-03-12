@@ -1,5 +1,8 @@
 package org.openlca.display;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
@@ -16,7 +19,7 @@ public class Cell {
 	static Config config;
 	private long min;
 	private long max;
-	private Result result;
+	private List<Result> result;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
 		this.startingLinksPoint = startingLinksPoint;
@@ -41,39 +44,39 @@ public class Cell {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Cell(Contribution<CategorizedDescriptor> contribution, long min, long max) {
+	public Cell(List<Contribution<CategorizedDescriptor>> contributions, long min, long max) {
 		this.min = min;
 		this.max = max;
-		this.result = new Result(contribution);
+		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());
 		isDrawable = true;
 		rgb = computeRGB();
 	}
 
-	public Result getResult() {
+	public List<Result> getResult() {
 		return result;
 	}
 
 	public double getTargetValue() {
-		return result.getValue();
+		return result.stream().mapToDouble(r -> r.getValue()).sum();
 	}
 
 	public double getNormalizedValue() {
-		return result.getValue() + Math.abs(min) + 1;
+		return result.stream().mapToDouble(r -> r.getValue() + Math.abs(min) + 1).sum();
 	}
 
 	public double getAmount() {
-		return result.getAmount();
+		return result.stream().mapToDouble(r -> r.getAmount()).sum();
 	}
 
 	public double getNormalizedAmount() {
-		return result.getAmount() + Math.abs(min) + 1;
+		return result.stream().mapToDouble(r -> r.getAmount() + Math.abs(min) + 1).sum();
 	}
 
 	private RGB computeRGB() {
 		double percentage = 0;
-		var value = result.getContribution().item.id;
+		var value = result.get(0).getContribution().item.id;
 		try {
-			percentage = (((value - min) * 100) / (max - min))/100.0 ;
+			percentage = (((value - min) * 100) / (max - min)) / 100.0;
 		} catch (Exception e) {
 			percentage = -1;
 		}
@@ -126,7 +129,8 @@ public class Cell {
 	}
 
 	public String toString() {
-		return rgb + " / " + result.getValue() + " / [ " + startPixel + "; " + endPixel + " ]";
+		var results = result.stream().map(r -> Double.toString(r.getValue())).collect(Collectors.toList());
+		return rgb + " / " + String.join(", ", results) + " / [ " + startPixel + "; " + endPixel + " ]";
 	}
 
 }

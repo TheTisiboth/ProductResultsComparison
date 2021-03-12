@@ -159,7 +159,7 @@ public class ProductDisplay {
 		});
 
 	}
-	
+
 	public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
 		Map<Object, Boolean> seen = new ConcurrentHashMap<>();
 		return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
@@ -198,15 +198,15 @@ public class ProductDisplay {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
 					resetDefaultColorCategories();
-					var list = products.stream().flatMap(p -> p.getList().stream()
-							.filter(r -> r.getResult().getContribution().item != null).map(r -> {
-								var categoryId = r.getResult().getContribution().item.category;
+					var list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results.getResult()
+							.stream().filter(r -> r.getContribution().item != null).map(r -> {
+								var categoryId = r.getContribution().item.category;
 								var cat = db.getDescriptor(Category.class, categoryId);
 								if (categoryMap.get(cat.name) == null) {
 									categoryMap.put(cat.name, cat);
 								}
 								return cat.name;
-							})).distinct().sorted().collect(Collectors.toList());
+							}))).distinct().sorted().collect(Collectors.toList());
 					list.add(0, "");
 					selectCategory.setItems(list.toArray(String[]::new));
 				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
@@ -216,7 +216,7 @@ public class ProductDisplay {
 					resetDefaultColorCategories();
 					var catId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
 					products.stream().forEach(p -> p.getList().stream().forEach(c -> {
-						if (c.getResult().getContribution().item.category == catId) {
+						if (c.getResult().get(0).getContribution().item.category == catId) {
 							c.setRgb(chosenColor.getRGB());
 						}
 					}));
@@ -567,8 +567,10 @@ public class ProductDisplay {
 				if (category.isLinkDrawable()) {
 					var nextMap = products.get(productIndex + 1);
 					// We search for a category that has the same process
-					var optional = nextMap.getList().stream().filter(next -> next.getResult().getContribution().item
-							.equals(category.getResult().getContribution().item)).findFirst();
+					var optional = nextMap.getList().stream()
+							.filter(next -> next.getResult().get(0).getContribution().item
+									.equals(category.getResult().get(0).getContribution().item))
+							.findFirst();
 					if (optional.isPresent()) {
 						var linkedCategory = optional.get();
 						var startPoint = category.getStartingLinkPoint();

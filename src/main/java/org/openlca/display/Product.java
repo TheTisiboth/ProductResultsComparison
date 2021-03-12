@@ -2,7 +2,7 @@ package org.openlca.display;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 import org.eclipse.swt.graphics.Point;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
@@ -18,7 +18,7 @@ public class Product {
 	static Config config;
 	private double width;
 	private Point startEdge;
-	private long min,max;
+	private long min, max;
 
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
@@ -31,11 +31,11 @@ public class Product {
 		max = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
 		min = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
 		for (Contribution<CategorizedDescriptor> contribution : l) {
-			list.add(new Cell(contribution, min,max));
+			List<Contribution<CategorizedDescriptor>> contributions = new ArrayList<>();
+			contributions.add(contribution);
+			list.add(new Cell(contributions, min, max));
 		}
 	}
-
-
 
 	public static void updateComparisonCriteria(ComparisonCriteria c) {
 		criteria = c;
@@ -62,38 +62,10 @@ public class Product {
 		this.list = list;
 	}
 
-//	public void setResult(int index, Result r) {
-//		list.set(index, r);
-//	}
-//
-//	public Result getResult(int index) {
-//		return list.get(index);
-//	}
-
 	public long getCutoffSize(double cutOff) {
 		return list.stream().filter(c -> c.getAmount() < cutOff).count();
 	}
-	/**
-	 * Return the size of the product list, without counting the 0 or null values
-	 * 
-	 * @return The effective size of this product
-	 */
-	public int getEffectiveSize() {
-		try {
-			switch (criteria) {
-			case AMOUNT:
-				return (int) list.stream().filter(r -> r.getResult().getContribution().amount != 0.0).count();
-			case CATEGORY:
-				return (int) list.stream().filter(r -> r.getResult().getContribution().item.category != null).count();
-			case LOCATION:
-				return (int) list.stream().filter(r -> ((ProcessDescriptor) r.getResult().getContribution().item).location != null)
-						.count();
-			}
-		} catch (NullPointerException | NoSuchElementException e) {
-			return 0;
-		}
-		return 0;
-	}
+
 
 	public double min() {
 		return min;
@@ -102,13 +74,13 @@ public class Product {
 	public double max() {
 		return max;
 	}
-	
 
 	@Override
 	public String toString() {
 		String s = "[ ";
-		for (Cell r : list) {
-			s += r.getResult().getContribution().item.toString() + ", ";
+		for (Cell c : list) {
+			var l = c.getResult().stream().map(r -> r.getContribution().item.toString()).collect(Collectors.toList());
+			s += String.join(", ", l);
 		}
 		s += " ]";
 		return s;
@@ -121,8 +93,8 @@ public class Product {
 		switch (criteria) {
 		case AMOUNT:
 			list.sort((r1, r2) -> {
-				double a1 = r1.getResult().getContribution().amount;
-				double a2 = r2.getResult().getContribution().amount;
+				double a1 = r1.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
+				double a2 = r2.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
 				if (a1 == 0.0 && a2 != 0.0) {
 					return -1;
 				} else if (a1 != 0.0 && a2 == 0.0) {
@@ -139,15 +111,8 @@ public class Product {
 			break;
 		case CATEGORY:
 			list.sort((r1, r2) -> {
-				Long c1 = ((ProcessDescriptor) r1.getResult().getContribution().item).category;
-				Long c2 = ((ProcessDescriptor) r2.getResult().getContribution().item).category;
-				if (c1 == null && c2 == null) {
-					return 0;
-				} else if (c1 == null && c2 != null) {
-					return -1;
-				} else if (c1 != null && c2 == null) {
-					return 1;
-				}
+				Double c1 = r1.getResult().stream().mapToDouble(r -> r.getContribution().item.category).sum();
+				Double c2 = r2.getResult().stream().mapToDouble(r -> r.getContribution().item.category).sum();
 				long result = c1.longValue() - c2.longValue();
 				if (result < 0) {
 					return -1;
@@ -161,15 +126,10 @@ public class Product {
 		case LOCATION:
 			list.sort((r1, r2) -> {
 				try {
-					Long l1 = ((ProcessDescriptor) r1.getResult().getContribution().item).location;
-					Long l2 = ((ProcessDescriptor) r2.getResult().getContribution().item).location;
-					if (l1 == null && l2 == null) {
-						return 0;
-					} else if (l1 == null && l2 != null) {
-						return -1;
-					} else if (l1 != null && l2 == null) {
-						return 1;
-					}
+					Long l1 = r1.getResult().stream()
+							.mapToLong(r -> ((ProcessDescriptor) r.getContribution().item).location).sum();
+					Long l2 = r2.getResult().stream()
+							.mapToLong(r -> ((ProcessDescriptor) r.getContribution().item).location).sum();
 					long result = l1.longValue() - l2.longValue();
 					if (result < 0) {
 						return -1;
