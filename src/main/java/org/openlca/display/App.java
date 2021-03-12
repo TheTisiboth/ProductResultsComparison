@@ -8,6 +8,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
+import org.openlca.core.database.IDatabase;
 import org.openlca.core.database.derby.DerbyDatabase;
 import org.openlca.core.matrix.ImpactIndex;
 import org.openlca.core.matrix.MatrixData;
@@ -35,19 +36,19 @@ public class App {
 		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE | SWT.MAX);
 		shell.setText("Product comparison GUI");
 		shell.setLayout(new GridLayout());
-		ContributionResult result = null;
+		Pair<ContributionResult, IDatabase> pair = null;
 		String dbName = "ecoinvent_371_cutoff_unit_20210104";
 		if (!config.useFakeResults) {
 //			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104", "exiobase3_monetary_20181212", "needs_18",
 //					"ideaolcaelemnames_final", "evah_pigment_database_20190314", "usda_1901009" };
 
 			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
-			result = getContributionResults(dbName, config);
+			pair = getContributionResults(dbName, config);
 //			products = getHighestContributionResults(dbNames, config);
 //		} else {
 //			result = createProducts(5, config);
 		}
-		new ProductDisplay(shell, config, result, dbName).display();
+		new ProductDisplay(shell, config, pair.first, pair.second, dbName).display();
 		shell.open();
 		while (!shell.isDisposed()) {
 			if (!display.readAndDispatch()) {
@@ -91,18 +92,17 @@ public class App {
 		return list;
 	}
 
-	private static ContributionResult getContributionResults(String dbName, Config config) {
+	private static Pair<ContributionResult, IDatabase> getContributionResults(String dbName, Config config) {
 		println("Connect to databases ");
 		Product.criteria = config.comparisonCriteria;
 		ContributionResult result = null;
 
-		try (var db = DerbyDatabase.fromDataDir(dbName)) {
-			var techIndex = TechIndex.unlinkedOf(db);
-			var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
-			result = ContributionResult.of(db, data);
+		var db = DerbyDatabase.fromDataDir(dbName);
+		var techIndex = TechIndex.unlinkedOf(db);
+		var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
+		result = ContributionResult.of(db, data);
+		return new Pair<ContributionResult, IDatabase>(result, db);
 
-		}
-		return result;
 	}
 
 	private static Pair<ImpactIndex, List<Product>> createProducts(int productsAmount, Config config) {

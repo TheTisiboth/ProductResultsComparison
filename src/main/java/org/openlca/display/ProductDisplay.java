@@ -10,7 +10,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
@@ -39,6 +38,9 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
+import org.openlca.core.database.IDatabase;
+import org.openlca.core.model.Category;
+import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.core.results.ContributionResult;
 
 public class ProductDisplay {
@@ -54,16 +56,17 @@ public class ProductDisplay {
 	private ComparisonCriteria comparisonCriteria;
 	private Canvas canvas;
 	private Map<ComparisonCriteria, Image> cacheMap;
-	private Combo categoriesValuesSelection;
 	private Combo selectCategory;
 	private Color chosenColor;
 	private ScrollBar vBar;
 	private ContributionResult contributionResult;
 	private final String dbName;
 	private long cutOff;
+	private IDatabase db;
 
-	public ProductDisplay(Shell shell, Config config, ContributionResult result, String dbName) {
+	public ProductDisplay(Shell shell, Config config, ContributionResult result, IDatabase db, String dbName) {
 		this.dbName = dbName;
+		this.db = db;
 		this.shell = shell;
 		this.config = config;
 		products = new ArrayList<>();
@@ -118,68 +121,108 @@ public class ProductDisplay {
 		createChoseImpactCategories(row1, row2);
 		createAgregateCombo(row1);
 		createColorPicker(row1);
-		createSelectedCategory(row1);
+		createSelectedCategory(row1, row2);
 
 	}
 
+	/**
+	 * Dropdown menu, allow us to chose different Impact Categories
+	 * 
+	 * @param row1 The menu bar
+	 * @param row2 The canvas
+	 */
 	private void createChoseImpactCategories(Composite row1, Composite row2) {
 		MultipleSelectionCombo msc = new MultipleSelectionCombo(row1, SWT.BORDER);
-		// TODO
-		// Handle impact with same names
-		var indexMap = contributionResult.impactIndex.content().stream().filter(distinctByKey(index -> index.name))
-				.collect(Collectors.toMap(index -> index.name, index -> index));
-		contributionResult.impactIndex.content().stream().forEach(i -> msc.add(i.name));
+		var impactCategoryMap = contributionResult.impactIndex.content().stream()
+				.filter(distinctByKey(impactCategory -> impactCategory.id))
+				.collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
+						impactCategory -> impactCategory));
+		contributionResult.impactIndex.content().stream()
+				.forEach(impactCategory -> msc.add(impactCategory.id + ": " + impactCategory.name));
 		msc.setSize(500, 500);
-
 		msc.addModifyListener(new ModifyListener() {
-
 			@Override
 			public void modifyText(ModifyEvent e) {
-				var t = msc.getSelections();
+				var selections = msc.getSelections();
 				products = new ArrayList<>();
-				Arrays.stream(t).forEach(impactName -> {
-					var cs = contributionResult.getProcessContributions(indexMap.get(impactName));
+				Arrays.stream(selections).forEach(impactName -> {
+					var cs = contributionResult.getProcessContributions(impactCategoryMap.get(impactName));
 					var p = new Product(cs, impactName);
 					products.add(p);
 				});
 
-				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size());
+				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() + 1);
 				sortProducts();
-				triggerSelectValueComboSelectionListener(selectCategory, true);
+				triggerComboSelection(selectCategory, true);
 				redraw(row2, true);
 			}
 		});
 
 	}
+	
+	public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
+		Map<Object, Boolean> seen = new ConcurrentHashMap<>();
+		return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
+	}
 
+	/**
+	 * Dropdown menu, allow us to chose by what we want to agregate the contribution
+	 * results
+	 * 
+	 * @param row1 The menu bar
+	 */
 	private void createAgregateCombo(Composite row1) {
+		// TODO
+		// Implement the behavior
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Agregate : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
-
 		String values[] = { "", "Category", "Location" };
 		c.setItems(values);
 	}
 
-	private void createSelectedCategory(Composite row1) {
+	/**
+	 * Dropdown menu, allow us to chose a specific Process Category to color
+	 * 
+	 * @param row1 The menu bar
+	 * @param row2 The canvas
+	 */
+	private void createSelectedCategory(Composite row1, Composite row2) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Select Category : ");
 		selectCategory = new Combo(row1, SWT.READ_ONLY);
 		selectCategory.setBounds(50, 50, 400, 65);
+		var categoryMap = new HashMap<String, Descriptor>();
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
-				if (selectCategory.getSelectionIndex() == -1) {
-					var list = products.stream()
-							.flatMap(p -> p.getList().stream()
-									.filter(r -> r.getResult().getContribution().item != null)
-									.map(r -> r.getResult().getContribution().item.category.toString()).distinct())
-							.collect(Collectors.toList());
+				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
+					resetDefaultColorCategories();
+					var list = products.stream().flatMap(p -> p.getList().stream()
+							.filter(r -> r.getResult().getContribution().item != null).map(r -> {
+								var categoryId = r.getResult().getContribution().item.category;
+								var cat = db.getDescriptor(Category.class, categoryId);
+								if (categoryMap.get(cat.name) == null) {
+									categoryMap.put(cat.name, cat);
+								}
+								return cat.name;
+							})).distinct().sorted().collect(Collectors.toList());
 					list.add(0, "");
 					selectCategory.setItems(list.toArray(String[]::new));
+				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
+					resetDefaultColorCategories();
+					redraw(row2, true);
+				} else { // A category is selected : update color
+					resetDefaultColorCategories();
+					var catId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
+					products.stream().forEach(p -> p.getList().stream().forEach(c -> {
+						if (c.getResult().getContribution().item.category == catId) {
+							c.setRgb(chosenColor.getRGB());
+						}
+					}));
+					redraw(row2, true);
 				}
 			}
-
 		});
 	}
 
@@ -188,7 +231,7 @@ public class ProductDisplay {
 	 * 
 	 * @param deselect Indicate if we deselect the selected value of the combo
 	 */
-	private void triggerSelectValueComboSelectionListener(Combo combo, boolean deselect) {
+	private void triggerComboSelection(Combo combo, boolean deselect) {
 		if (deselect) {
 			combo.deselectAll();
 		}
@@ -199,6 +242,9 @@ public class ProductDisplay {
 		combo.notifyListeners(SWT.Selection, event);
 	}
 
+	/**
+	 * Reset the default color of the categories
+	 */
 	public void resetDefaultColorCategories() {
 		RGB rgb = chosenColor.getRGB();
 		// Reset categories colors to default (just for the one which where changed)
@@ -237,14 +283,14 @@ public class ProductDisplay {
 					chosenColor.dispose();
 					chosenColor = new Color(composite.getDisplay(), rgb);
 					colorLabel.setBackground(chosenColor);
-//					triggerSelectValueComboSelectionListener(categoriesValuesSelection, false);
+					triggerComboSelection(selectCategory, false);
 				}
 			}
 		});
 	}
 
 	/**
-	 * Sort products by descending amount, according to the comparison criteria
+	 * Sort products by ascending amount, according to the comparison criteria
 	 */
 	private void sortProducts() {
 		Product.updateComparisonCriteria(comparisonCriteria);
@@ -341,12 +387,6 @@ public class ProductDisplay {
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
 	}
 
-	public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
-
-		Map<Object, Boolean> seen = new ConcurrentHashMap<>();
-		return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
-	}
-
 	/**
 	 * Handle the categories, which represent a bundle of same values
 	 * 
@@ -393,9 +433,6 @@ public class ProductDisplay {
 
 		Point start = null;
 		var newChunk = 0;
-		System.out.println();
-		System.out.println("Product" + productIndex + " : " + p.getList().size() + " contribution results");
-		System.out.println("Product " + productIndex + " : " + categoriesAmount + " categories");
 		boolean isCutOff = true;
 		RGB rgbCutOff = new RGB(192, 192, 192);
 		for (var categoriesIndex = 0; categoriesIndex < categories.size(); categoriesIndex++) {

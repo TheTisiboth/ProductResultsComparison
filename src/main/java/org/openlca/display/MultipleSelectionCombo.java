@@ -19,6 +19,8 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 
@@ -134,7 +136,8 @@ public class MultipleSelectionCombo extends Composite {
 		Rectangle shellRect = new Rectangle(p.x, p.y + size.y, size.x, 0);
 		Shell shell = new Shell(MultipleSelectionCombo.this.getShell(), SWT.BORDER | SWT.V_SCROLL);
 		shell.setLayout(new GridLayout());
-
+		var vBar = shell.getVerticalBar();
+		
 		Button toggle = new Button(shell, SWT.BUTTON1);
 		toggle.setText("Toggle");
 		toggle.addListener(SWT.MouseDown, e -> {
@@ -159,7 +162,17 @@ public class MultipleSelectionCombo extends Composite {
 			b.pack();
 			buttons[i] = b;
 		}
+		vBar.addListener(SWT.Selection,new Listener() {
+			@Override
+			public void handleEvent(Event event) {
+				int vSelection = vBar.getSelection();
+				int destY = -vSelection - shellRect.y;
+				shell.scroll(0, destY, 0, 0, shell.getSize().x, shell.getSize().y, false);
+				shellRect.y = -vSelection;
+				shell.setLocation(shellRect.x, shellRect.y);
 
+			}
+		});
 		shell.pack();
 		shell.setLocation(shellRect.x, shellRect.y);
 
@@ -193,19 +206,14 @@ public class MultipleSelectionCombo extends Composite {
 
 	private void displayText(Text display) {
 		StringBuffer sb = new StringBuffer();
-		boolean first = true;
+//		boolean first = true;
 //		for (Option o : options) {
 //			if (o.selection) {
 //				sb.append(first? o.text : ", " + o.text);
 //				first = false;
 //			}			
 //		}
-		// Modified, in order to display either "..." or the default text if nothing is
-		// selected
-//		if (options.stream().filter(o -> o.selection).count() > 0)
-//			sb.append("...");
-//		else
-			sb.append(defaultText);
+		sb.append(defaultText);
 		display.setText((sb.length() > 0) ? sb.toString() : defaultText);
 		display.pack();
 		this.pack();
