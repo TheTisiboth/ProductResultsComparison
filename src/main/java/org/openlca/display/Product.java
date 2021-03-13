@@ -70,6 +70,10 @@ public class Product {
 		return min;
 	}
 
+	public double normalizedMaxAmount() {
+		return list.get(list.size()-1).getNormalizedAmount();
+	}
+	
 	public double max() {
 		return max;
 	}

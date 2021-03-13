@@ -196,14 +196,14 @@ public class ProductDisplay {
 	 */
 	private void createSelectedCategory(Composite row1, Composite row2) {
 		final Label l = new Label(row1, SWT.NONE);
-		l.setText("Select Category : ");
+		l.setText("Select Product Category : ");
 		selectCategory = new Combo(row1, SWT.READ_ONLY);
-		selectCategory.setBounds(50, 50, 400, 65);
+		selectCategory.setBounds(50, 50, 500, 65);
 		var categoryMap = new HashMap<String, Descriptor>();
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
-					resetDefaultColorCategories();
+					resetDefaultColorCells();
 					var list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
 							.getResult().stream().filter(r -> r.getContribution().item != null).map(r -> {
 								var categoryId = r.getContribution().item.category;
@@ -216,10 +216,10 @@ public class ProductDisplay {
 					list.add(0, "");
 					selectCategory.setItems(list.toArray(String[]::new));
 				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
-					resetDefaultColorCategories();
+					resetDefaultColorCells();
 					redraw(row2, true);
 				} else { // A category is selected : update color
-					resetDefaultColorCategories();
+					resetDefaultColorCells();
 					var catId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
 					products.stream().forEach(p -> p.getList().stream().forEach(c -> {
 						if (c.getResult().get(0).getContribution().item.category == catId) {
@@ -249,13 +249,13 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Reset the default color of the categories
+	 * Reset the default color of the cells
 	 */
-	public void resetDefaultColorCategories() {
+	public void resetDefaultColorCells() {
 		RGB rgb = chosenColor.getRGB();
 		// Reset categories colors to default (just for the one which where changed)
-		products.stream().forEach(p -> p.getList().stream().filter(category -> category.getRgb().equals(rgb))
-				.forEach(category -> category.resetDefaultRGB()));
+		products.stream().forEach(p -> p.getList().stream().filter(cell -> cell.getRgb().equals(rgb))
+				.forEach(cell -> cell.resetDefaultRGB()));
 	}
 
 	/**
@@ -378,12 +378,12 @@ public class ProductDisplay {
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText("Contribution process " + productIndex, textPos.x, textPos.y);
+		gc.drawText("Contribution result " + productIndex, textPos.x, textPos.y);
 		textPos.y += 25;
 		gc.drawText("Impact : " + p.getName(), textPos.x, textPos.y);
 		var totalAmount = p.getList().stream().mapToDouble(cell -> cell.getAmount()).sum();
 		System.out.println("Product " + productIndex + " ; " + totalAmount + " total amount");
-		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, maxAmount);
+		productWidth = handleCells(gc, rectEdge, productIndex, p, productWidth, maxAmount);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
 			Point startPoint = new Point(rectEdge.x - 20, rectEdge.y - 50);
@@ -394,13 +394,14 @@ public class ProductDisplay {
 			startPoint = new Point(endPoint.x - 15, endPoint.y - 15);
 			drawLine(gc, startPoint, endPoint, null, null);
 		}
-		p.setBounds(rectEdge, productWidth);
+		p.setBounds(rectEdge, (int) productWidth);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
 	}
 
 	/**
-	 * Handle the categories, which represent a bundle of same values
+	 * Handle the cells, and display a rectangle for each of them (and merge the
+	 * cutoff one in on visual cell)
 	 * 
 	 * @param gc             The GC component
 	 * @param rectEdge       The coordinate of the product rectangle
@@ -417,25 +418,23 @@ public class ProductDisplay {
 	 * @param gap
 	 * @return
 	 */
-	private int handleCategories(GC gc, Point rectEdge, int productIndex, Product p, int productWidth,
-			double maxAmount) {
-		var categories = p.getList();
-		final int categoriesAmount = categories.size();
-		double maxAmountCurrentProduct = p.max();
+	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxAmount) {
+		// TODO
+		// Fix proportional size of cells
+		var cells = p.getList();
 		// Sum all the distincts values
-		double resultsSum = categories.stream().mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
-		productWidth = (int) (productWidth * (resultsSum / maxAmount));
-		long offset = categories.size() - cutOff;
-		double resultsSumNonCutOff = categories.stream().skip(offset)
-				.mapToDouble(category -> Math.abs(category.getNormalizedValue())).sum();
+		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getNormalizedValue())).sum();
+		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxAmount));
+		long amountCutOff = cells.size() - cutOff;
+		double normalizedTotalAMountSumNonCutOff = cells.stream().skip(amountCutOff)
+				.mapToDouble(cell -> Math.abs(cell.getNormalizedValue())).sum();
 
-		long amountCutOff = offset;
 		double cutoffRectangleSizeRatio = 1.0 / 4.0;
 		double nonCutOffRecangleSizeRation = 1 - cutoffRectangleSizeRatio;
-		double gap = ((double) productWidth * cutoffRectangleSizeRatio / amountCutOff);
+		double gap = (productWidth * cutoffRectangleSizeRatio / amountCutOff);
 		int chunk = -1, chunkSize = 0;
 		boolean gapEnoughBig = true;
-		var newProductWidth = 0;
+		var newProductWidth = 0.0;
 		if (gap < 1.0) {
 			// If the gap is to small, we put a certain amount of results in the same
 			// chunk
@@ -447,76 +446,64 @@ public class ProductDisplay {
 		var newChunk = 0;
 		boolean isCutOff = true;
 		RGB rgbCutOff = new RGB(192, 192, 192);
-		for (var categoriesIndex = 0; categoriesIndex < categories.size(); categoriesIndex++) {
-			
-			if (!gapEnoughBig) {
-				newChunk = computeChunk(gap, chunk, chunkSize, categoriesIndex);
-			}
-			var category = categories.get(categoriesIndex);
-			if(categoriesIndex == categories.size()-1) {
-				var cat = db.getDescriptor(Category.class, category.getResult().get(0).getContribution().item.category);
-				System.out.println();
-			}
+		for (var cellIndex = 0; cellIndex < cells.size(); cellIndex++) {
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
-			int categoryWidth = 0;
-			if (categoriesIndex >= offset) {
+			if (cellIndex >= amountCutOff) {
 				if (isCutOff) {
 					isCutOff = false;
 					gc.setBackground(new Color(gc.getDevice(), rgbCutOff));
-					gc.fillRectangle(rectEdge.x + 1, rectEdge.y + 1, newProductWidth, productHeight - 1);
+					gc.fillRectangle(rectEdge.x + 1, rectEdge.y + 1, (int) newProductWidth, productHeight - 1);
 					gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
 					chunk = -1;
 					chunkSize = 0;
 					gapEnoughBig = true;
-				}
-				gap = ((double) productWidth * nonCutOffRecangleSizeRation / (categoriesAmount - amountCutOff));
-				if (gap < 1.0) {
-					// If the gap is to small, we put a certain amount of results in the same
-					// chunk
-					chunkSize = (int) Math.ceil(1 / gap);
-					gapEnoughBig = false;
-				}
-				if (!gapEnoughBig && chunk != newChunk) {
-					// We are on a new chunk, so we draw a category with a width of 1 pixel
-					categoryWidth = 1;
-				} else if (!gapEnoughBig && chunk == newChunk) {
-					// We stay on the same chunk, so we don't draw the category
-					categoryWidth = 0;
-				} else {
-					var value = category.getNormalizedValue();
-					var percentage = value / resultsSumNonCutOff;
-					categoryWidth = (int) (productWidth * nonCutOffRecangleSizeRation * percentage);
-				}
-			} else {
-				categoryWidth = 0;
-				if (!gapEnoughBig && chunk != newChunk) {
-					// We are on a new chunk, so we draw a category with a width of 1 pixel
-					categoryWidth = 1;
-				} else if (!gapEnoughBig && chunk == newChunk) {
-					// We stay on the same chunk, so we don't draw the category
-					categoryWidth = 0;
-				} else {
-					var value = category.getNormalizedValue();
-					var percentage = value / resultsSum;
-					categoryWidth = (int) (productWidth * percentage);
+					gap = (productWidth * nonCutOffRecangleSizeRation / (cells.size() - amountCutOff));
+					if (gap < 1.0) {
+						// If the gap is to small, we put a certain amount of results in the same
+						// chunk
+						chunkSize = (int) Math.ceil(1 / gap);
+						gapEnoughBig = false;
+					}
 				}
 			}
-			newProductWidth += categoryWidth;
-
-			gc.setBackground(new Color(gc.getDevice(), category.getRgb()));
-			gc.fillRectangle(start.x, start.y, categoryWidth, productHeight - 1);
-			gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-
-			var end = computeEndCategory(start, category, categoryWidth);
+			if (!gapEnoughBig) {
+				newChunk = computeChunk(gap, chunk, chunkSize, cellIndex);
+			}
+			var cell = cells.get(cellIndex);
+			int cellWidth = 0;
+			if (!gapEnoughBig && chunk != newChunk) {
+				// We are on a new chunk, so we draw a cell with a width of 1 pixel
+				cellWidth = 1;
+			} else if (!gapEnoughBig && chunk == newChunk) {
+				// We stay on the same chunk, so we don't draw the cell
+				cellWidth = 0;
+			} else {
+				var value = cell.getNormalizedValue();
+				if (cellIndex >= amountCutOff) {
+					var percentage = value / normalizedTotalAMountSumNonCutOff;
+					cellWidth = (int) (productWidth * nonCutOffRecangleSizeRation * percentage);
+				} else {
+					var percentage = value / normalizedTotalAmountSum;
+					cellWidth = (int) (productWidth * percentage);
+				}
+			}
+			newProductWidth += cellWidth;
+			if (cellIndex >= amountCutOff) {
+				gc.setBackground(new Color(gc.getDevice(), cell.getRgb()));
+				gc.fillRectangle(start.x, start.y, (int) cellWidth, productHeight - 1);
+				gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+			}
+			var end = computeEndCell(start, cell, (int) cellWidth);
 			if (gapEnoughBig || !gapEnoughBig && chunk != newChunk) {
-				// We end the current chunk / category
+				// We end the current chunk / cell
 				start = end;
 				chunk = newChunk;
 			}
+
 		}
-		return newProductWidth;
+		return (int) newProductWidth;
 	}
 
 	private int computeChunk(double gap, int chunk, int chunkSize, int resultIndex) {
@@ -529,23 +516,23 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Compute the end of the current category, and set some important information
-	 * about the category
+	 * Compute the end of the current cell, and set some important information about
+	 * the cell
 	 * 
-	 * @param start         The starting point of the category
-	 * @param category      The current category
-	 * @param categoryWidth The width of the category
-	 * @return The end point of the category
+	 * @param start     The starting point of the cell
+	 * @param cell      The current cell
+	 * @param cellWidth The width of the cell
+	 * @return The end point of the cell
 	 */
-	private Point computeEndCategory(Point start, Cell category, int categoryWidth) {
-		var end = new Point(start.x + categoryWidth, start.y);
+	private Point computeEndCell(Point start, Cell cell, int cellWidth) {
+		var end = new Point(start.x + cellWidth, start.y);
 		var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
 		var endingPoint = new Point(startingPoint.x, start.y - 2);
-		category.setData(startingPoint, endingPoint, start.x, end.x);
-		category.setStartingLinkPoint(startingPoint);
-		category.setEndingLinkPoint(endingPoint);
-		category.setStartPixel(start.x);
-		category.setEndPixel(end.x);
+		cell.setData(startingPoint, endingPoint, start.x, end.x);
+		cell.setStartingLinkPoint(startingPoint);
+		cell.setEndingLinkPoint(endingPoint);
+		cell.setStartPixel(start.x);
+		cell.setEndPixel(end.x);
 		return end;
 	}
 
@@ -579,23 +566,23 @@ public class ProductDisplay {
 	 */
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
-			var categoryMap = products.get(productIndex);
-			for (Cell category : categoryMap.getList()) {
-				if (category.isLinkDrawable()) {
-					var nextMap = products.get(productIndex + 1);
-					// We search for a category that has the same process
-					var optional = nextMap.getList().stream()
+			var cells = products.get(productIndex);
+			for (Cell cell : cells.getList()) {
+				if (cell.isLinkDrawable()) {
+					var nextCells = products.get(productIndex + 1);
+					// We search for a cell that has the same process
+					var optional = nextCells.getList().stream()
 							.filter(next -> next.getResult().get(0).getContribution().item
-									.equals(category.getResult().get(0).getContribution().item))
+									.equals(cell.getResult().get(0).getContribution().item))
 							.findFirst();
 					if (optional.isPresent()) {
-						var linkedCategory = optional.get();
-						var startPoint = category.getStartingLinkPoint();
-						var endPoint = linkedCategory.getEndingLinkPoint();
+						var linkedCell = optional.get();
+						var startPoint = cell.getStartingLinkPoint();
+						var endPoint = linkedCell.getEndingLinkPoint();
 						if (config.useBezierCurve) {
-							drawBezierCurve(gc, startPoint, endPoint, category.getRgb());
+							drawBezierCurve(gc, startPoint, endPoint, cell.getRgb());
 						} else {
-							drawLine(gc, startPoint, endPoint, category.getRgb(), null);
+							drawLine(gc, startPoint, endPoint, cell.getRgb(), null);
 						}
 					}
 				}
