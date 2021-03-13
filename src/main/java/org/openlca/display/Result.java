@@ -12,7 +12,7 @@ public class Result {
 	private Point startPoint; // Point from which a links start
 	private Point endPoint; // Point to which the links ends
 	private RGB rgb;
-	static ComparisonCriteria criteria;
+	static AggregationCriteria criteria;
 
 	public Result(Contribution<CategorizedDescriptor> item) {
 		contribution = item;
@@ -27,29 +27,21 @@ public class Result {
 	public double getValue() {
 		try {
 			switch (criteria) {
-			case AMOUNT:
-				return contribution.amount;
 			case CATEGORY:
 				return contribution.item.category;
 			case LOCATION:
 				return ((ProcessDescriptor) contribution.item).location;
+			default:
+				return contribution.amount;
 			}
 		} catch (ClassCastException | NullPointerException e) {
 			return 0;
 		}
-		return 0;
 	}
 
 	public RGB getRGB(double min, double max) {
 		double percentage = 0;
 		switch (criteria) {
-		case AMOUNT:
-			if (contribution.amount != 0.0) {
-				percentage = ((contribution.amount - min) * 100) / (max - min);
-			} else {
-				percentage = -1;
-			}
-			break;
 		case CATEGORY:
 			if (contribution.item.category != null) {
 				percentage = ((contribution.item.category - min) * 100) / (max - min);
@@ -65,6 +57,12 @@ public class Result {
 				percentage = -1;
 			}
 			break;
+		default:
+			if (contribution.amount != 0.0) {
+				percentage = ((contribution.amount - min) * 100) / (max - min);
+			} else {
+				percentage = -1;
+			}
 		}
 		if (percentage > 100.0) { // It happens because of uncertainty of division
 			percentage = 100.0;
@@ -103,15 +101,14 @@ public class Result {
 	public boolean isContributionEmpty() {
 		boolean contributionEmpty = false;
 		switch (criteria) {
-		case AMOUNT:
-			contributionEmpty = contribution.amount == 0.0;
-			break;
 		case CATEGORY:
 			contributionEmpty = contribution.item.category == null;
 			break;
 		case LOCATION:
 			contributionEmpty = ((ProcessDescriptor) contribution.item).location == null;
 			break;
+		default:
+			contributionEmpty = contribution.amount == 0.0;
 		}
 		return contributionEmpty;
 	}
@@ -133,9 +130,6 @@ public class Result {
 		boolean comparison;
 		try {
 			switch (criteria) {
-			case AMOUNT:
-				comparison = contribution.amount == r.contribution.amount;
-				break;
 			case CATEGORY:
 				comparison = ((CategorizedDescriptor) r.contribution.item).category
 						.equals(((CategorizedDescriptor) contribution.item).category);
@@ -145,7 +139,7 @@ public class Result {
 						.equals(((ProcessDescriptor) contribution.item).location);
 				break;
 			default:
-				throw new IllegalArgumentException("Unexpected value: " + criteria);
+				comparison = contribution.amount == r.contribution.amount;
 			}
 			return comparison;
 		} catch (NullPointerException e) {

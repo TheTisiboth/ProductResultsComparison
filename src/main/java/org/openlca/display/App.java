@@ -9,12 +9,15 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 import org.openlca.core.database.IDatabase;
+import org.openlca.core.database.ImpactMethodDao;
 import org.openlca.core.database.derby.DerbyDatabase;
+import org.openlca.core.math.CalculationSetup;
+import org.openlca.core.math.SystemCalculator;
 import org.openlca.core.matrix.ImpactIndex;
-import org.openlca.core.matrix.MatrixData;
-import org.openlca.core.matrix.TechIndex;
+import org.openlca.core.model.ProductSystem;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ImpactDescriptor;
+import org.openlca.core.model.descriptors.ImpactMethodDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
@@ -36,19 +39,12 @@ public class App {
 		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE | SWT.MAX);
 		shell.setText("Product comparison GUI");
 		shell.setLayout(new GridLayout());
-		Pair<ContributionResult, IDatabase> pair = null;
+		myData data = null;
 		String dbName = "ecoinvent_371_cutoff_unit_20210104";
 		if (!config.useFakeResults) {
-//			String dbNames[] = { "ecoinvent_371_cutoff_unit_20210104", "exiobase3_monetary_20181212", "needs_18",
-//					"ideaolcaelemnames_final", "evah_pigment_database_20190314", "usda_1901009" };
-
-			int impactIndexes[] = { 0, 20, 40, 100, 200, 300 };
-			pair = getContributionResults(dbName, config);
-//			products = getHighestContributionResults(dbNames, config);
-//		} else {
-//			result = createProducts(5, config);
+			data = getContributionResults(dbName, config);
 		}
-		new ProductDisplay(shell, config, pair.first, pair.second, dbName).display();
+		new ProductDisplay(shell, config, data, dbName).display();
 		shell.open();
 		while (!shell.isDisposed()) {
 			if (!display.readAndDispatch()) {
@@ -59,50 +55,18 @@ public class App {
 
 	}
 
-	private static List<Product> getHighestContributionResults(String dbNames[], Config config) {
-		var<Product> list = new ArrayList<Product>();
+	private static myData getContributionResults(String dbName, Config config) {
 		println("Connect to databases ");
-		Product.criteria = config.comparisonCriteria;
-		for (String dbName : dbNames) {
-			try (var db = DerbyDatabase.fromDataDir(dbName)) {
-				var techIndex = TechIndex.unlinkedOf(db);
-				var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
-				var result = ContributionResult.of(db, data);
-				// select the impact category with the highest result
-				ImpactDescriptor impact = null;
-				var impactIndex = 0;
-				for (int i = 0; i < result.impactIndex.size(); i++) {
-					var next = result.impactIndex.at(i);
-					if (impact == null) {
-						impact = next;
-						continue;
-					}
-					var currentVal = result.getTotalImpactResult(impact);
-					var nextVal = result.getTotalImpactResult(next);
-					if (nextVal > currentVal) {
-						impact = next;
-						impactIndex = i;
-					}
-				}
-				List<Contribution<CategorizedDescriptor>> cs = result.getProcessContributions(impact);
-				var p = new Product(cs, dbName);
-				list.add(p);
-			}
-		}
-		return list;
-	}
-
-	private static Pair<ContributionResult, IDatabase> getContributionResults(String dbName, Config config) {
-		println("Connect to databases ");
-		Product.criteria = config.comparisonCriteria;
-		ContributionResult result = null;
+		Product.criteria = config.aggregationCriteria;
 
 		var db = DerbyDatabase.fromDataDir(dbName);
-		var techIndex = TechIndex.unlinkedOf(db);
-		var data = MatrixData.of(db, techIndex).withImpacts(ImpactIndex.of(db)).build();
-		result = ContributionResult.of(db, data);
-		return new Pair<ContributionResult, IDatabase>(result, db);
-
+		var productSystem = db.get(ProductSystem.class, "7c16aba1-a7d2-4559-b336-a2208a52a25d");
+		var impactMethod = new ImpactMethodDao(db).getDescriptorForRefId("3f290cab-a3ac-38af-b940-f31faf74cbe4");
+		var setup = new CalculationSetup(productSystem);
+		setup.impactMethod = impactMethod;
+		var calc = new SystemCalculator(db);
+		var fullResult = calc.calculateFull(setup);
+		return new myData(productSystem, impactMethod, fullResult, db);
 	}
 
 	private static Pair<ImpactIndex, List<Product>> createProducts(int productsAmount, Config config) {
@@ -111,7 +75,7 @@ public class App {
 		var impactIndex = new ImpactIndex();
 
 		List<Product> products = new ArrayList<>();
-		Product.criteria = config.comparisonCriteria;
+		Product.criteria = config.aggregationCriteria;
 		for (int i = 0; i < productsAmount; i++) {
 			var impactDescriptor = new ImpactDescriptor();
 			impactDescriptor.id = i;
@@ -131,4 +95,19 @@ public class App {
 		}
 		return new Pair<ImpactIndex, List<Product>>(impactIndex, products);
 	}
+}
+
+class myData {
+	ProductSystem productSystem;
+	ImpactMethodDescriptor impactMethod;
+	ContributionResult contributionResult;
+	IDatabase db;
+
+	public myData(ProductSystem ps, ImpactMethodDescriptor im, ContributionResult cr, IDatabase d) {
+		productSystem = ps;
+		impactMethod = im;
+		contributionResult = cr;
+		db = d;
+	}
+
 }

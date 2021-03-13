@@ -40,7 +40,9 @@ import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.Category;
+import org.openlca.core.model.ProductSystem;
 import org.openlca.core.model.descriptors.Descriptor;
+import org.openlca.core.model.descriptors.ImpactMethodDescriptor;
 import org.openlca.core.results.ContributionResult;
 
 public class ProductDisplay {
@@ -53,31 +55,35 @@ public class ProductDisplay {
 	private final int productHeight;
 	private final int gapBetweenProduct;
 	private int theoreticalScreenHeight;
-	private ComparisonCriteria comparisonCriteria;
+	private AggregationCriteria aggregationCriteria;
 	private Canvas canvas;
-	private Map<ComparisonCriteria, Image> cacheMap;
+	private Map<AggregationCriteria, Image> cacheMap;
 	private Combo selectCategory;
 	private Color chosenColor;
 	private ScrollBar vBar;
 	private ContributionResult contributionResult;
-	private final String dbName;
 	private long cutOff;
 	private IDatabase db;
+	private ProductSystem productSystem;
+	private ImpactMethodDescriptor impactMethod;
+	private String dbName;
 
-	public ProductDisplay(Shell shell, Config config, ContributionResult result, IDatabase db, String dbName) {
+	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
-		this.db = db;
+		this.db = data.db;
 		this.shell = shell;
 		this.config = config;
+		productSystem = data.productSystem;
+		impactMethod = data.impactMethod;
 		products = new ArrayList<>();
-		contributionResult = result;
+		contributionResult = data.contributionResult;
 		origin = new Point(0, 0);
 		xMargin = 200;
 		productHeight = 30;
 		gapBetweenProduct = 300;
-		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 4;
+		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 2;
 		canvas = null;
-		comparisonCriteria = config.comparisonCriteria;
+		aggregationCriteria = config.aggregationCriteria;
 		cacheMap = new HashMap<>();
 		cutOff = 100;
 	}
@@ -133,13 +139,13 @@ public class ProductDisplay {
 	 */
 	private void createChoseImpactCategories(Composite row1, Composite row2) {
 		MultipleSelectionCombo msc = new MultipleSelectionCombo(row1, SWT.BORDER);
-		var impactCategoryMap = contributionResult.impactIndex.content().stream()
-				.filter(distinctByKey(impactCategory -> impactCategory.id))
-				.collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
-						impactCategory -> impactCategory));
-		contributionResult.impactIndex.content().stream()
-				.forEach(impactCategory -> msc.add(impactCategory.id + ": " + impactCategory.name));
+		var impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
+			msc.add(impactCategory.id + ": " + impactCategory.name);
+			return impactCategory;
+		}).collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
+				impactCategory -> impactCategory));
 		msc.setSize(500, 500);
+		msc.toggleAll();
 		msc.addModifyListener(new ModifyListener() {
 			@Override
 			public void modifyText(ModifyEvent e) {
@@ -198,8 +204,8 @@ public class ProductDisplay {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
 					resetDefaultColorCategories();
-					var list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results.getResult()
-							.stream().filter(r -> r.getContribution().item != null).map(r -> {
+					var list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
+							.getResult().stream().filter(r -> r.getContribution().item != null).map(r -> {
 								var categoryId = r.getContribution().item.category;
 								var cat = db.getDescriptor(Category.class, categoryId);
 								if (categoryMap.get(cat.name) == null) {
@@ -293,7 +299,7 @@ public class ProductDisplay {
 	 * Sort products by ascending amount, according to the comparison criteria
 	 */
 	private void sortProducts() {
-		Product.updateComparisonCriteria(comparisonCriteria);
+		Product.updateComparisonCriteria(aggregationCriteria);
 		products.stream().forEach(p -> p.sort());
 	}
 
@@ -310,14 +316,14 @@ public class ProductDisplay {
 		Image cache = null;
 		if (recompute) { // If we recompute, we draw a brand new Image
 			cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-			cacheMap.put(comparisonCriteria, cache);
+			cacheMap.put(aggregationCriteria, cache);
 			cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
 		} else {
 			// Otherwise, we take a cached Image
-			cache = cacheMap.get(comparisonCriteria);
+			cache = cacheMap.get(aggregationCriteria);
 			if (cache == null) {
 				cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-				cacheMap.put(comparisonCriteria, cache);
+				cacheMap.put(aggregationCriteria, cache);
 				cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
 			}
 		}
@@ -339,7 +345,12 @@ public class ProductDisplay {
 		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
-
+		Point textPos = new Point(5, 5);
+		gc.drawText("Database : " + dbName, textPos.x, textPos.y);
+		textPos.y += 30;
+		gc.drawText("Product system : " + productSystem.name, textPos.x, textPos.y);
+		textPos.y += 30;
+		gc.drawText("Impact assessment method : " + impactMethod.name, textPos.x, textPos.y);
 		var maxAmount = products.stream().mapToDouble(p -> p.getList().stream().map(c -> c.getNormalizedAmount())
 				.reduce(0.0, (subtotal, amount) -> subtotal + amount)).max();
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
@@ -367,15 +378,16 @@ public class ProductDisplay {
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText(dbName, textPos.x, textPos.y);
+		gc.drawText("Contribution process " + productIndex, textPos.x, textPos.y);
 		textPos.y += 25;
 		gc.drawText("Impact : " + p.getName(), textPos.x, textPos.y);
-
+		var totalAmount = p.getList().stream().mapToDouble(cell -> cell.getAmount()).sum();
+		System.out.println("Product " + productIndex + " ; " + totalAmount + " total amount");
 		productWidth = handleCategories(gc, rectEdge, productIndex, p, productWidth, maxAmount);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
-			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
-			Point endPoint = new Point(startPoint.x + productWidth, startPoint.y);
+			Point startPoint = new Point(rectEdge.x - 20, rectEdge.y - 50);
+			Point endPoint = new Point((int) (startPoint.x + maxProductWidth), startPoint.y);
 			drawLine(gc, startPoint, endPoint, null, null);
 			startPoint = new Point(endPoint.x - 15, endPoint.y + 15);
 			drawLine(gc, startPoint, endPoint, null, null);
@@ -436,10 +448,15 @@ public class ProductDisplay {
 		boolean isCutOff = true;
 		RGB rgbCutOff = new RGB(192, 192, 192);
 		for (var categoriesIndex = 0; categoriesIndex < categories.size(); categoriesIndex++) {
+			
 			if (!gapEnoughBig) {
 				newChunk = computeChunk(gap, chunk, chunkSize, categoriesIndex);
 			}
 			var category = categories.get(categoriesIndex);
+			if(categoriesIndex == categories.size()-1) {
+				var cat = db.getDescriptor(Category.class, category.getResult().get(0).getContribution().item.category);
+				System.out.println();
+			}
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 			}
@@ -660,7 +677,7 @@ public class ProductDisplay {
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				e.gc.drawImage(cacheMap.get(comparisonCriteria), origin.x, origin.y);
+				e.gc.drawImage(cacheMap.get(aggregationCriteria), origin.x, origin.y);
 			}
 		});
 	}

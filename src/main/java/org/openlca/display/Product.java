@@ -14,7 +14,7 @@ public class Product {
 	private ArrayList<Cell> list;
 	private String name;
 	private boolean drawSeparationBetweenResults = false;
-	static ComparisonCriteria criteria;
+	static AggregationCriteria criteria;
 	static Config config;
 	private double width;
 	private Point startEdge;
@@ -37,7 +37,7 @@ public class Product {
 		}
 	}
 
-	public static void updateComparisonCriteria(ComparisonCriteria c) {
+	public static void updateComparisonCriteria(AggregationCriteria c) {
 		criteria = c;
 		Result.criteria = c;
 	}
@@ -66,7 +66,6 @@ public class Product {
 		return list.stream().filter(c -> c.getAmount() < cutOff).count();
 	}
 
-
 	public double min() {
 		return min;
 	}
@@ -91,24 +90,6 @@ public class Product {
 	 */
 	public void sort() {
 		switch (criteria) {
-		case AMOUNT:
-			list.sort((r1, r2) -> {
-				double a1 = r1.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
-				double a2 = r2.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
-				if (a1 == 0.0 && a2 != 0.0) {
-					return -1;
-				} else if (a1 != 0.0 && a2 == 0.0) {
-					return 1;
-				}
-				if (a2 > a1) {
-					return -1;
-				}
-				if (a1 > a2) {
-					return 1;
-				}
-				return 0;
-			});
-			break;
 		case CATEGORY:
 			list.sort((r1, r2) -> {
 				Double c1 = r1.getResult().stream().mapToDouble(r -> r.getContribution().item.category).sum();
@@ -146,7 +127,22 @@ public class Product {
 			});
 			break;
 		default:
-			throw new IllegalArgumentException("Unexpected value: " + criteria);
+			list.sort((r1, r2) -> {
+				double a1 = r1.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
+				double a2 = r2.getResult().stream().mapToDouble(r -> r.getContribution().amount).sum();
+				if (a1 == 0.0 && a2 != 0.0) {
+					return -1;
+				} else if (a1 != 0.0 && a2 == 0.0) {
+					return 1;
+				}
+				if (a2 > a1) {
+					return -1;
+				}
+				if (a1 > a2) {
+					return 1;
+				}
+				return 0;
+			});
 		}
 	}
 
