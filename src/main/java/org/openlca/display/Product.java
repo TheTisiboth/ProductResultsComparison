@@ -15,7 +15,8 @@ public class Product {
 	private String name;
 	static AggregationCriteria criteria;
 	static Config config;
-	private long min, max;
+	private long minProcessId, maxProcessId;
+	private double minAmount, maxAmount;
 
 	public Product(ComparisonCriteria c) {
 		list = new ArrayList<>();
@@ -25,12 +26,14 @@ public class Product {
 		name = n;
 		list = new ArrayList<>();
 		Result.criteria = criteria;
-		max = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
-		min = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
+		maxProcessId = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
+		minProcessId = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
+		minAmount = l.stream().mapToDouble(c -> c.amount).min().getAsDouble();
+		maxAmount = l.stream().mapToDouble(c -> c.amount).max().getAsDouble();
 		for (Contribution<CategorizedDescriptor> contribution : l) {
 			List<Contribution<CategorizedDescriptor>> contributions = new ArrayList<>();
 			contributions.add(contribution);
-			list.add(new Cell(contributions, min, max));
+			list.add(new Cell(contributions, minProcessId, maxProcessId, minAmount, maxAmount));
 		}
 	}
 
@@ -48,11 +51,11 @@ public class Product {
 	}
 
 	public double minProcessId() {
-		return min;
+		return minProcessId;
 	}
 
 	public double maxProcessId() {
-		return max;
+		return maxProcessId;
 	}
 
 	@Override

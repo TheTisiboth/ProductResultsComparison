@@ -17,9 +17,10 @@ public class Cell {
 	private Point endingLinkPoint;
 	private boolean isDrawable;
 	static Config config;
-	private long min;
-	private long max;
+	private long minProcessId;
+	private long maxProcessId;
 	private List<Result> result;
+	private double minAmount, maxAmount;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
 		this.startingLinksPoint = startingLinksPoint;
@@ -44,9 +45,12 @@ public class Cell {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Cell(List<Contribution<CategorizedDescriptor>> contributions, long min, long max) {
-		this.min = min;
-		this.max = max;
+	public Cell(List<Contribution<CategorizedDescriptor>> contributions, long min, long max, double minAmount,
+			double maxAmount) {
+		this.minProcessId = min;
+		this.maxProcessId = max;
+		this.minAmount = minAmount;
+		this.maxAmount = maxAmount;
 		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());
 		isDrawable = true;
 		rgb = computeRGB();
@@ -61,7 +65,7 @@ public class Cell {
 	}
 
 	public double getNormalizedValue() {
-		return result.stream().mapToDouble(r -> r.getValue() + Math.abs(min) + 1).sum();
+		return result.stream().mapToDouble(r -> r.getValue() + Math.abs(minAmount) + 1).sum();
 	}
 
 	public double getAmount() {
@@ -69,14 +73,14 @@ public class Cell {
 	}
 
 	public double getNormalizedAmount() {
-		return result.stream().mapToDouble(r -> r.getAmount() + Math.abs(min) + 1).sum();
+		return result.stream().mapToDouble(r -> r.getAmount() + Math.abs(minAmount) + 1).sum();
 	}
 
 	private RGB computeRGB() {
 		double percentage = 0;
 		var value = result.get(0).getContribution().item.id;
 		try {
-			percentage = (((value - min) * 100) / (max - min)) / 100.0;
+			percentage = (((value - minProcessId) * 100) / (maxProcessId - minProcessId)) / 100.0;
 		} catch (Exception e) {
 			percentage = -1;
 		}

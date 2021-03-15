@@ -343,10 +343,14 @@ public class ProductDisplay {
 		gc.drawText("Product system : " + productSystem.name, textPos.x, textPos.y);
 		textPos.y += 30;
 		gc.drawText("Impact assessment method : " + impactMethod.name, textPos.x, textPos.y);
-		var maxAmount = products.stream().mapToDouble(p -> p.getList().stream().map(c -> c.getNormalizedAmount())
-				.reduce(0.0, (subtotal, amount) -> subtotal + amount)).max();
+		var optional = products.stream().mapToDouble(p -> p.getList().stream().mapToDouble(c -> c.getAmount()).sum())
+				.max();
+		double maxSumAmount = 0.0;
+		if (optional.isPresent()) {
+			maxSumAmount = optional.getAsDouble();
+		}
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			handleProduct(gc, maxProductWidth, rectEdge, productIndex, maxAmount.getAsDouble());
+			handleProduct(gc, maxProductWidth, rectEdge, productIndex, maxSumAmount);
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
 		drawLinks(gc);
@@ -362,7 +366,7 @@ public class ProductDisplay {
 	 * @param productIndex    The index of the current product
 	 * @param maxAmount       The max amounts sum of the products
 	 */
-	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, double maxAmount) {
+	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, double maxSumAmount) {
 		var p = products.get(productIndex);
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
@@ -370,9 +374,7 @@ public class ProductDisplay {
 		gc.drawText("Contribution result " + productIndex, textPos.x, textPos.y);
 		textPos.y += 25;
 		gc.drawText("Impact : " + p.getName(), textPos.x, textPos.y);
-		var totalAmount = p.getList().stream().mapToDouble(cell -> cell.getAmount()).sum();
-		System.out.println("Product " + productIndex + " ; " + totalAmount + " total amount");
-		productWidth = handleCells(gc, rectEdge, productIndex, p, productWidth, maxAmount);
+		productWidth = handleCells(gc, rectEdge, productIndex, p, productWidth, maxSumAmount);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
 			Point startPoint = new Point(rectEdge.x - 20, rectEdge.y - 50);
@@ -399,13 +401,14 @@ public class ProductDisplay {
 	 * @param maxAmount    The max amounts sum of the products
 	 * @return The new product width
 	 */
-	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxAmount) {
+	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxSumAmount) {
 		// TODO
 		// Fix proportional size of cells
 		var cells = p.getList();
 		// Sum all the distincts values
-		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getNormalizedValue())).sum();
-		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxAmount));
+		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getAmount())).sum();
+		System.out.println("Product " + productIndex + " : " + normalizedTotalAmountSum + " amounts sum");
+		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxSumAmount));
 		long amountCutOff = cells.size() - cutOff;
 		double normalizedTotalAMountSumNonCutOff = cells.stream().skip(amountCutOff)
 				.mapToDouble(cell -> Math.abs(cell.getNormalizedValue())).sum();
