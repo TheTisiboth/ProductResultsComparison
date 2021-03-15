@@ -13,11 +13,8 @@ public class Product {
 
 	private ArrayList<Cell> list;
 	private String name;
-	private boolean drawSeparationBetweenResults = false;
 	static AggregationCriteria criteria;
 	static Config config;
-	private double width;
-	private Point startEdge;
 	private long min, max;
 
 	public Product(ComparisonCriteria c) {
@@ -42,14 +39,6 @@ public class Product {
 		Result.criteria = c;
 	}
 
-	public void setDrawSeparationBetweenResults(boolean draw) {
-		drawSeparationBetweenResults = draw;
-	}
-
-	public boolean getDrawSeparationBetweenResults() {
-		return drawSeparationBetweenResults;
-	}
-
 	public String getName() {
 		return name;
 	}
@@ -58,23 +47,11 @@ public class Product {
 		return list;
 	}
 
-	public void setList(ArrayList<Cell> list) {
-		this.list = list;
-	}
-
-	public long getCutoffSize(double cutOff) {
-		return list.stream().filter(c -> c.getAmount() < cutOff).count();
-	}
-
-	public double min() {
+	public double minProcessId() {
 		return min;
 	}
 
-	public double normalizedMaxAmount() {
-		return list.get(list.size()-1).getNormalizedAmount();
-	}
-	
-	public double max() {
+	public double maxProcessId() {
 		return max;
 	}
 
@@ -149,18 +126,4 @@ public class Product {
 			});
 		}
 	}
-
-	public void setBounds(Point startEdge, int productWidth) {
-		width = productWidth;
-		this.startEdge = startEdge;
-	}
-
-	public double getWidth() {
-		return width;
-	}
-
-	public Point getStartEdge() {
-		return startEdge;
-	}
-
 }

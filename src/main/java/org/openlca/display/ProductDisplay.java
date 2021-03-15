@@ -5,9 +5,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.eclipse.swt.SWT;
@@ -89,7 +86,8 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Display the products, and draw links between each matching results
+	 * Entry point of the program. Display the products, and draw links between each
+	 * matching results
 	 */
 	void display() {
 		System.out.println("Display start");
@@ -164,11 +162,6 @@ public class ProductDisplay {
 			}
 		});
 
-	}
-
-	public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
-		Map<Object, Boolean> seen = new ConcurrentHashMap<>();
-		return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
 	}
 
 	/**
@@ -335,9 +328,8 @@ public class ProductDisplay {
 	 * matching results. Since it is costly, it is firstly drawed in an image. Once
 	 * it is finished, we paint the image
 	 * 
-	 * @param recompute Tell if we have to recompute the categories. If false, then
-	 *                  we just redraw the whole objects
 	 * @param composite The parent component
+	 * @param cache     The cached image in which we are drawing
 	 */
 	private void cachedPaint(Composite composite, Image cache) {
 		GC gc = new GC(cache);
@@ -368,10 +360,7 @@ public class ProductDisplay {
 	 * @param maxProductWidth The maximal width for a product
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
-	 * @param categoriesList
-	 * @param maxAmount
-	 * @param recompute       Tell if we have to recompute the categories. If false,
-	 *                        then we just redraw the whole objects
+	 * @param maxAmount       The max amounts sum of the products
 	 */
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, double maxAmount) {
 		var p = products.get(productIndex);
@@ -394,7 +383,6 @@ public class ProductDisplay {
 			startPoint = new Point(endPoint.x - 15, endPoint.y - 15);
 			drawLine(gc, startPoint, endPoint, null, null);
 		}
-		p.setBounds(rectEdge, (int) productWidth);
 		// Draw a rectangle for each product
 		gc.drawRectangle(rectEdge.x, rectEdge.y, productWidth, productHeight);
 	}
@@ -403,20 +391,13 @@ public class ProductDisplay {
 	 * Handle the cells, and display a rectangle for each of them (and merge the
 	 * cutoff one in on visual cell)
 	 * 
-	 * @param gc             The GC component
-	 * @param rectEdge       The coordinate of the product rectangle
-	 * @param productIndex   The index of the current product
-	 * @param p              The current product
-	 * @param productWidth   The product width
-	 * @param categories
-	 * @param maxAmount
-	 * @param recompute      Tell if we have to recompute the categories. If false,
-	 *                       then we just redraw the whole objects
-	 * @param drawSeparation
-	 * @param chunkSize
-	 * @param chunk
-	 * @param gap
-	 * @return
+	 * @param gc           The GC component
+	 * @param rectEdge     The coordinate of the product rectangle
+	 * @param productIndex The index of the current product
+	 * @param p            The current product
+	 * @param productWidth The product width
+	 * @param maxAmount    The max amounts sum of the products
+	 * @return The new product width
 	 */
 	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxAmount) {
 		// TODO
@@ -469,7 +450,7 @@ public class ProductDisplay {
 				}
 			}
 			if (!gapEnoughBig) {
-				newChunk = computeChunk(gap, chunk, chunkSize, cellIndex);
+				newChunk = computeChunk(chunk, chunkSize, cellIndex);
 			}
 			var cell = cells.get(cellIndex);
 			int cellWidth = 0;
@@ -506,9 +487,17 @@ public class ProductDisplay {
 		return (int) newProductWidth;
 	}
 
-	private int computeChunk(double gap, int chunk, int chunkSize, int resultIndex) {
+	/**
+	 * Tells in which chunk we are
+	 * 
+	 * @param chunk       Index of the current chunk
+	 * @param chunkSize   Amount of cells in a chunk
+	 * @param resultIndex The cell index
+	 * @return The new chunk index
+	 */
+	private int computeChunk(int chunk, int chunkSize, int cellIndex) {
 		// Every chunkSize, we increment the chunk
-		var newChunk = (resultIndex % (int) chunkSize) == 0;
+		var newChunk = (cellIndex % (int) chunkSize) == 0;
 		if (newChunk == true) {
 			chunk++;
 		}
@@ -562,7 +551,7 @@ public class ProductDisplay {
 	/**
 	 * Draw the links between each matching results
 	 * 
-	 * @param e The Paint Event
+	 * @param gc The GC component
 	 */
 	private void drawLinks(GC gc) {
 		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
@@ -593,10 +582,10 @@ public class ProductDisplay {
 	/**
 	 * Draw a bezier curve, between 2 points
 	 * 
-	 * @param e     The Paint Event
+	 * @param gc    The GC component
 	 * @param start The starting point
 	 * @param end   The ending point
-	 * @param alpha
+	 * @param rgb   The color of the curve
 	 */
 	private void drawBezierCurve(GC gc, Point start, Point end, RGB rgb) {
 		gc.setForeground(new Color(gc.getDevice(), rgb));
