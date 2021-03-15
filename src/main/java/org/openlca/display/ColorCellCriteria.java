@@ -1,17 +1,20 @@
 package org.openlca.display;
 
-public enum ComparisonCriteria {
-	AMOUNT("Amount"), CATEGORY("Category"), LOCATION("Location");
+public enum ColorCellCriteria {
+	NONE(""), CATEGORY("Category"), LOCATION("Location"), AMOUNT("Amount");
 
 	private String criteria;
 
-	ComparisonCriteria(String c) {
+	ColorCellCriteria(String c) {
 		criteria = c;
 	}
 
-	public static ComparisonCriteria getCriteria(String c) {
-		for (ComparisonCriteria comparisonCriteria : values()) {
+	public static ColorCellCriteria getCriteria(String c) {
+		for (ColorCellCriteria comparisonCriteria : values()) {
 			if (comparisonCriteria.criteria.equals(c)) {
+				if (c.equals("")) {
+					return AMOUNT;
+				}
 				return comparisonCriteria;
 			}
 		}

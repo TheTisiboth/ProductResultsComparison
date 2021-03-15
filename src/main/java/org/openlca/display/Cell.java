@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
+import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 
 public class Cell {
@@ -21,6 +22,9 @@ public class Cell {
 	private long maxProcessId;
 	private List<Result> result;
 	private double minAmount, maxAmount;
+	private long minCategory, maxCategory;
+	private long minLocation, maxLocation;
+	static ColorCellCriteria criteria;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
 		this.startingLinksPoint = startingLinksPoint;
@@ -46,11 +50,15 @@ public class Cell {
 	}
 
 	public Cell(List<Contribution<CategorizedDescriptor>> contributions, long min, long max, double minAmount,
-			double maxAmount) {
+			double maxAmount, long minCategory, long maxCategory, long minLocation, long maxLocation) {
 		this.minProcessId = min;
 		this.maxProcessId = max;
 		this.minAmount = minAmount;
 		this.maxAmount = maxAmount;
+		this.minCategory = minCategory;
+		this.maxCategory = maxCategory;
+		this.minLocation = minLocation;
+		this.maxLocation = maxLocation;
 		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());
 		isDrawable = true;
 		rgb = computeRGB();
@@ -65,7 +73,7 @@ public class Cell {
 	}
 
 	public double getNormalizedValue() {
-		return result.stream().mapToDouble(r -> r.getValue() + Math.abs(minAmount) + 1).sum();
+		return result.stream().mapToDouble(r -> r.getValue() + Math.abs(minAmount)).sum();
 	}
 
 	public double getAmount() {
@@ -73,14 +81,32 @@ public class Cell {
 	}
 
 	public double getNormalizedAmount() {
-		return result.stream().mapToDouble(r -> r.getAmount() + Math.abs(minAmount) + 1).sum();
+		return result.stream().mapToDouble(r -> r.getAmount() + Math.abs(minAmount)).sum();
 	}
 
-	private RGB computeRGB() {
+	public RGB computeRGB() {
 		double percentage = 0;
-		var value = result.get(0).getContribution().item.id;
+		long value = 0;
+		long min = 0, max = 0;
+		switch (criteria) {
+		case LOCATION:
+			value = ((ProcessDescriptor) result.get(0).getContribution().item).location;
+			min = minLocation;
+			max = maxLocation;
+			break;
+		case CATEGORY:
+			value = result.get(0).getContribution().item.category;
+			min = minCategory;
+			max = maxCategory;
+			break;
+		default:
+			value = result.get(0).getContribution().item.id;
+			min = minProcessId;
+			max = maxProcessId;
+			break;
+		}
 		try {
-			percentage = (((value - minProcessId) * 100) / (maxProcessId - minProcessId)) / 100.0;
+			percentage = (((value - min) * 100) / (max - min)) / 100.0;
 		} catch (Exception e) {
 			percentage = -1;
 		}
@@ -90,7 +116,6 @@ public class Cell {
 			isDrawable = false;
 			return new RGB(192, 192, 192); // Grey color for unfocused values (0 or null)
 		}
-		RGB rgb = null;
 		if (config.useGradientColor) {
 			java.awt.Color tmpColor = GradientColorHelper.numberToColorPercentage(percentage);
 			rgb = new RGB(tmpColor.getRed(), tmpColor.getGreen(), tmpColor.getBlue());

@@ -57,7 +57,7 @@ public class App {
 
 	private static myData getContributionResults(String dbName, Config config) {
 		println("Connect to databases ");
-		Product.criteria = config.aggregationCriteria;
+		Product.criteria = config.colorCellCriteria;
 
 		var db = DerbyDatabase.fromDataDir(dbName);
 		var productSystem = db.get(ProductSystem.class, "7c16aba1-a7d2-4559-b336-a2208a52a25d");
@@ -75,7 +75,7 @@ public class App {
 		var impactIndex = new ImpactIndex();
 
 		List<Product> products = new ArrayList<>();
-		Product.criteria = config.aggregationCriteria;
+		Product.criteria = config.colorCellCriteria;
 		for (int i = 0; i < productsAmount; i++) {
 			var impactDescriptor = new ImpactDescriptor();
 			impactDescriptor.id = i;

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.eclipse.swt.graphics.Point;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
@@ -13,14 +12,12 @@ public class Product {
 
 	private ArrayList<Cell> list;
 	private String name;
-	static AggregationCriteria criteria;
+	static ColorCellCriteria criteria;
 	static Config config;
 	private long minProcessId, maxProcessId;
 	private double minAmount, maxAmount;
-
-	public Product(ComparisonCriteria c) {
-		list = new ArrayList<>();
-	}
+	private long minCategory, maxCategory;
+	private long minLocation, maxLocation;
 
 	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
 		name = n;
@@ -30,16 +27,26 @@ public class Product {
 		minProcessId = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
 		minAmount = l.stream().mapToDouble(c -> c.amount).min().getAsDouble();
 		maxAmount = l.stream().mapToDouble(c -> c.amount).max().getAsDouble();
+		minCategory = l.stream().mapToLong(c -> c.item.category).min().getAsLong();
+		maxCategory = l.stream().mapToLong(c -> c.item.category).max().getAsLong();
+		minLocation = l.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).min().getAsLong();
+		maxLocation = l.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).max().getAsLong();
 		for (Contribution<CategorizedDescriptor> contribution : l) {
 			List<Contribution<CategorizedDescriptor>> contributions = new ArrayList<>();
 			contributions.add(contribution);
-			list.add(new Cell(contributions, minProcessId, maxProcessId, minAmount, maxAmount));
+			list.add(new Cell(contributions, minProcessId, maxProcessId, minAmount, maxAmount, minCategory, maxCategory,
+					minLocation, maxLocation));
 		}
 	}
 
-	public static void updateComparisonCriteria(AggregationCriteria c) {
+	public void updateCellsColor() {
+		list.stream().forEach(c -> c.computeRGB());
+	}
+
+	public static void updateComparisonCriteria(ColorCellCriteria c) {
 		criteria = c;
 		Result.criteria = c;
+		Cell.criteria = c;
 	}
 
 	public String getName() {

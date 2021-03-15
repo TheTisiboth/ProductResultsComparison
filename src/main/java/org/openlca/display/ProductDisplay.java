@@ -35,6 +35,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Spinner;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ProductSystem;
@@ -52,14 +53,15 @@ public class ProductDisplay {
 	private final int productHeight;
 	private final int gapBetweenProduct;
 	private int theoreticalScreenHeight;
-	private AggregationCriteria aggregationCriteria;
+	private ColorCellCriteria colorCellCriteria;
 	private Canvas canvas;
-	private Map<AggregationCriteria, Image> cacheMap;
+	private Map<ColorCellCriteria, Image> cacheMap;
 	private Combo selectCategory;
 	private Color chosenColor;
 	private ScrollBar vBar;
 	private ContributionResult contributionResult;
-	private long cutOff;
+	private int nonCutoffAmount;
+	private int cutOffSize;
 	private IDatabase db;
 	private ProductSystem productSystem;
 	private ImpactMethodDescriptor impactMethod;
@@ -80,9 +82,10 @@ public class ProductDisplay {
 		gapBetweenProduct = 300;
 		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 2;
 		canvas = null;
-		aggregationCriteria = config.aggregationCriteria;
+		colorCellCriteria = config.colorCellCriteria;
 		cacheMap = new HashMap<>();
-		cutOff = 100;
+		nonCutoffAmount = 100;
+		cutOffSize = 25;
 	}
 
 	/**
@@ -92,6 +95,7 @@ public class ProductDisplay {
 	void display() {
 		System.out.println("Display start");
 		Product.config = config;
+		Product.updateComparisonCriteria(colorCellCriteria);
 		Cell.config = config;
 
 		/**
@@ -120,12 +124,14 @@ public class ProductDisplay {
 
 		row1.setLayout(new RowLayout());
 
-		redraw(row2, true);
+//		redraw(row2, true);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 		createChoseImpactCategories(row1, row2);
-		createAgregateCombo(row1);
+		createAgregateCombo(row1, row2);
 		createColorPicker(row1);
 		createSelectedCategory(row1, row2);
+		createSelectCutoffSize(row1, row2);
+		createSelectAmountVisibleProcess(row1, row2);
 
 	}
 
@@ -170,15 +176,26 @@ public class ProductDisplay {
 	 * 
 	 * @param row1 The menu bar
 	 */
-	private void createAgregateCombo(Composite row1) {
-		// TODO
-		// Implement the behavior
+	private void createAgregateCombo(Composite row1, Composite row2) {
 		final Label l = new Label(row1, SWT.NONE);
-		l.setText("Agregate : ");
+		l.setText("Color cells by : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
 		String values[] = { "", "Category", "Location" };
 		c.setItems(values);
+		c.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				var choice = c.getItem(c.getSelectionIndex());
+				ColorCellCriteria criteria = ColorCellCriteria.getCriteria(choice);
+				if (!colorCellCriteria.equals(criteria)) {
+					colorCellCriteria = criteria;
+					Product.updateComparisonCriteria(criteria);
+					products.stream().forEach(p -> p.updateCellsColor());
+					triggerComboSelection(selectCategory, true);
+					redraw(row2, true);
+				}
+			}
+		});
 	}
 
 	/**
@@ -289,10 +306,60 @@ public class ProductDisplay {
 	}
 
 	/**
+	 * Spinner allowing to set the ratio of the cutoff area
+	 * 
+	 * @param row1 The menu bar
+	 * @param row2 The canvas
+	 */
+	private void createSelectCutoffSize(Composite row1, Composite row2) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Select cutoff size (%): ");
+		var selectCutoff = new Spinner(row1, SWT.BORDER);
+		selectCutoff.setBounds(50, 50, 500, 65);
+		selectCutoff.setMinimum(0);
+		selectCutoff.setMaximum(100);
+		selectCutoff.setSelection(cutOffSize);
+		selectCutoff.addListener(SWT.KeyDown, new Listener() {
+			@Override
+			public void handleEvent(Event e) {
+				if (e.keyCode == 13) { // If we press Enter
+					cutOffSize = selectCutoff.getSelection();
+					redraw(row2, true);
+				}
+			}
+		});
+	}
+
+	/**
+	 * Spinner allowing to set the amount of visible process
+	 * 
+	 * @param row1 The menu bar
+	 * @param row2 The canvas
+	 */
+	private void createSelectAmountVisibleProcess(Composite row1, Composite row2) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Select amount non cutoff process: ");
+		var selectCutoff = new Spinner(row1, SWT.BORDER);
+		selectCutoff.setBounds(50, 50, 500, 65);
+		selectCutoff.setMinimum(0);
+		selectCutoff.setMaximum(10000);
+		selectCutoff.setSelection(nonCutoffAmount);
+		selectCutoff.addListener(SWT.KeyDown, new Listener() {
+			@Override
+			public void handleEvent(Event arg0) {
+				if (arg0.keyCode == 13) { // If we press Enter
+					nonCutoffAmount = selectCutoff.getSelection();
+					redraw(row2, true);
+				}
+			}
+		});
+	}
+
+	/**
 	 * Sort products by ascending amount, according to the comparison criteria
 	 */
 	private void sortProducts() {
-		Product.updateComparisonCriteria(aggregationCriteria);
+		Product.updateComparisonCriteria(colorCellCriteria);
 		products.stream().forEach(p -> p.sort());
 	}
 
@@ -309,14 +376,14 @@ public class ProductDisplay {
 		Image cache = null;
 		if (recompute) { // If we recompute, we draw a brand new Image
 			cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-			cacheMap.put(aggregationCriteria, cache);
+			cacheMap.put(colorCellCriteria, cache);
 			cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
 		} else {
 			// Otherwise, we take a cached Image
-			cache = cacheMap.get(aggregationCriteria);
+			cache = cacheMap.get(colorCellCriteria);
 			if (cache == null) {
 				cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-				cacheMap.put(aggregationCriteria, cache);
+				cacheMap.put(colorCellCriteria, cache);
 				cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
 			}
 		}
@@ -334,7 +401,7 @@ public class ProductDisplay {
 	private void cachedPaint(Composite composite, Image cache) {
 		GC gc = new GC(cache);
 		screenSize = composite.getSize(); // Responsive behavior
-		double maxProductWidth = screenSize.x * 0.8; // 80% of the screen width
+		double maxProductWidth = screenSize.x * 0.85; // 90% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		Point textPos = new Point(5, 5);
@@ -343,8 +410,8 @@ public class ProductDisplay {
 		gc.drawText("Product system : " + productSystem.name, textPos.x, textPos.y);
 		textPos.y += 30;
 		gc.drawText("Impact assessment method : " + impactMethod.name, textPos.x, textPos.y);
-		var optional = products.stream().mapToDouble(p -> p.getList().stream().mapToDouble(c -> c.getAmount()).sum())
-				.max();
+		var optional = products.stream()
+				.mapToDouble(p -> p.getList().stream().mapToDouble(c -> c.getNormalizedAmount()).sum()).max();
 		double maxSumAmount = 0.0;
 		if (optional.isPresent()) {
 			maxSumAmount = optional.getAsDouble();
@@ -406,15 +473,22 @@ public class ProductDisplay {
 		// Fix proportional size of cells
 		var cells = p.getList();
 		// Sum all the distincts values
-		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getAmount())).sum();
+		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getNormalizedAmount()))
+				.sum();
 		System.out.println("Product " + productIndex + " : " + normalizedTotalAmountSum + " amounts sum");
+		int minimumProductWidth = (int) (0.3 * productWidth);
 		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxSumAmount));
-		long amountCutOff = cells.size() - cutOff;
-		double normalizedTotalAMountSumNonCutOff = cells.stream().skip(amountCutOff)
-				.mapToDouble(cell -> Math.abs(cell.getNormalizedValue())).sum();
-
-		double cutoffRectangleSizeRatio = 1.0 / 4.0;
+		if (productWidth < minimumProductWidth) {
+			// We set a minimum width, so the rectangle is not too small (in case
+			// of big differences )
+			productWidth = minimumProductWidth;
+		}
+		long amountCutOff = cells.size() - nonCutoffAmount;
+		double totalAmountSumNonCutOff = cells.stream().skip(amountCutOff)
+				.mapToDouble(cell -> Math.abs(cell.getNormalizedAmount())).sum();
+		double cutoffRectangleSizeRatio = cutOffSize / 100.0;
 		double nonCutOffRecangleSizeRation = 1 - cutoffRectangleSizeRatio;
+		// Minimum space between each cells
 		double gap = (productWidth * cutoffRectangleSizeRatio / amountCutOff);
 		int chunk = -1, chunkSize = 0;
 		boolean gapEnoughBig = true;
@@ -425,7 +499,6 @@ public class ProductDisplay {
 			chunkSize = (int) Math.ceil(1 / gap);
 			gapEnoughBig = false;
 		}
-
 		Point start = null;
 		var newChunk = 0;
 		boolean isCutOff = true;
@@ -445,8 +518,6 @@ public class ProductDisplay {
 					gapEnoughBig = true;
 					gap = (productWidth * nonCutOffRecangleSizeRation / (cells.size() - amountCutOff));
 					if (gap < 1.0) {
-						// If the gap is to small, we put a certain amount of results in the same
-						// chunk
 						chunkSize = (int) Math.ceil(1 / gap);
 						gapEnoughBig = false;
 					}
@@ -464,9 +535,9 @@ public class ProductDisplay {
 				// We stay on the same chunk, so we don't draw the cell
 				cellWidth = 0;
 			} else {
-				var value = cell.getNormalizedValue();
+				var value = cell.getNormalizedAmount();
 				if (cellIndex >= amountCutOff) {
-					var percentage = value / normalizedTotalAMountSumNonCutOff;
+					var percentage = value / totalAmountSumNonCutOff;
 					cellWidth = (int) (productWidth * nonCutOffRecangleSizeRation * percentage);
 				} else {
 					var percentage = value / normalizedTotalAmountSum;
@@ -656,7 +727,7 @@ public class ProductDisplay {
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				e.gc.drawImage(cacheMap.get(aggregationCriteria), origin.x, origin.y);
+				e.gc.drawImage(cacheMap.get(colorCellCriteria), origin.x, origin.y);
 			}
 		});
 	}

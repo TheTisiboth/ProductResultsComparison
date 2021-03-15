@@ -7,7 +7,7 @@ import org.openlca.core.results.Contribution;
 public class Result {
 
 	private Contribution<CategorizedDescriptor> contribution;
-	static AggregationCriteria criteria;
+	static ColorCellCriteria criteria;
 
 	public Result(Contribution<CategorizedDescriptor> item) {
 		contribution = item;

@@ -7,5 +7,5 @@ public class Config {
 	public final boolean useFakeResults = false;
 	public final boolean useGradientColor = true;
 	public final boolean useBezierCurve = false;
-	public final AggregationCriteria aggregationCriteria = AggregationCriteria.NONE;
+	public final ColorCellCriteria colorCellCriteria = ColorCellCriteria.NONE;
 }
