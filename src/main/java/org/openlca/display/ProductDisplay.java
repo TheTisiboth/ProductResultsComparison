@@ -8,8 +8,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.ModifyEvent;
-import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -36,10 +34,13 @@ import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableItem;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ProductSystem;
 import org.openlca.core.model.descriptors.Descriptor;
+import org.openlca.core.model.descriptors.ImpactDescriptor;
 import org.openlca.core.model.descriptors.ImpactMethodDescriptor;
 import org.openlca.core.results.ContributionResult;
 
@@ -66,6 +67,9 @@ public class ProductDisplay {
 	private ProductSystem productSystem;
 	private ImpactMethodDescriptor impactMethod;
 	private String dbName;
+	private Table impactCategoryTable;
+	private Map<String, ImpactDescriptor> impactCategoryMap;
+	private List<String> impactCategories;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
@@ -86,6 +90,7 @@ public class ProductDisplay {
 		cacheMap = new HashMap<>();
 		nonCutoffAmount = 100;
 		cutOffSize = 25;
+		impactCategories = new ArrayList<>();
 	}
 
 	/**
@@ -124,15 +129,39 @@ public class ProductDisplay {
 
 		row1.setLayout(new RowLayout());
 
-//		redraw(row2, true);
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
+
+		createChooseTarget(row1, row2);
 		createChoseImpactCategories(row1, row2);
 		createAgregateCombo(row1, row2);
 		createColorPicker(row1);
 		createSelectedCategory(row1, row2);
 		createSelectCutoffSize(row1, row2);
 		createSelectAmountVisibleProcess(row1, row2);
+		createRunCalculation(row1, row2);
 
+	}
+
+	private void createChooseTarget(Composite row1, Composite row2) {
+		final Label l = new Label(row1, SWT.NONE);
+		l.setText("Target : ");
+		final Combo c = new Combo(row1, SWT.READ_ONLY);
+		c.setBounds(50, 50, 150, 65);
+		String values[] = { "", "Impact categories", "Product systems" };
+		c.setItems(values);
+		c.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				var choice = c.getItem(c.getSelectionIndex());
+				ColorCellCriteria criteria = ColorCellCriteria.getCriteria(choice);
+				if (!colorCellCriteria.equals(criteria)) {
+					colorCellCriteria = criteria;
+					Product.updateComparisonCriteria(criteria);
+					products.stream().forEach(p -> p.updateCellsColor());
+					triggerComboSelection(selectCategory, true);
+					redraw(row2, true);
+				}
+			}
+		});
 	}
 
 	/**
@@ -142,32 +171,44 @@ public class ProductDisplay {
 	 * @param row2 The canvas
 	 */
 	private void createChoseImpactCategories(Composite row1, Composite row2) {
-		MultipleSelectionCombo msc = new MultipleSelectionCombo(row1, SWT.BORDER);
-		var impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
-			msc.add(impactCategory.id + ": " + impactCategory.name);
+		var b = new Button(row1, SWT.NONE);
+		var composite = new Composite(row1, SWT.BORDER);
+		impactCategoryTable = new Table(composite, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+		impactCategoryTable.addListener(SWT.Selection, new Listener() {
+			public void handleEvent(Event event) {
+				if (event.detail == SWT.CHECK) {
+					if (((TableItem) event.item).getChecked()) {
+						impactCategories.add(((TableItem) event.item).getText());
+					} else {
+						impactCategories.remove(((TableItem) event.item).getText());
+					}
+				}
+			}
+		});
+		impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
+			TableItem item = new TableItem(impactCategoryTable, SWT.BORDER);
+			item.setText(impactCategory.id + ": " + impactCategory.name);
+			item.setChecked(true);
+			impactCategories.add(item.getText());
 			return impactCategory;
 		}).collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
 				impactCategory -> impactCategory));
-		msc.setSize(500, 500);
-		msc.toggleAll();
-		msc.addModifyListener(new ModifyListener() {
-			@Override
-			public void modifyText(ModifyEvent e) {
-				var selections = msc.getSelections();
-				products = new ArrayList<>();
-				Arrays.stream(selections).forEach(impactName -> {
-					var cs = contributionResult.getProcessContributions(impactCategoryMap.get(impactName));
-					var p = new Product(cs, impactName);
-					products.add(p);
-				});
 
-				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() + 1);
-				sortProducts();
-				triggerComboSelection(selectCategory, true);
-				redraw(row2, true);
+		b.setText("Toggle");
+		b.addListener(SWT.Selection, new Listener() {
+			public void handleEvent(Event e) {
+				Arrays.stream(impactCategoryTable.getItems()).forEach(item -> {
+					item.setChecked(!item.getChecked());
+					if (item.getChecked()) {
+						impactCategories.add(item.getText());
+					} else {
+						impactCategories.remove(item.getText());
+					}
+				});
 			}
 		});
-
+		b.pack();
+		impactCategoryTable.setSize(300, 100);
 	}
 
 	/**
@@ -181,7 +222,7 @@ public class ProductDisplay {
 		l.setText("Color cells by : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
-		String values[] = { "", "Category", "Location" };
+		String values[] = ColorCellCriteria.valuesToString();
 		c.setItems(values);
 		c.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
@@ -209,12 +250,12 @@ public class ProductDisplay {
 		l.setText("Select Product Category : ");
 		selectCategory = new Combo(row1, SWT.READ_ONLY);
 		selectCategory.setBounds(50, 50, 500, 65);
-		var categoryMap = new HashMap<String, Descriptor>();
+		var<String, Descriptor> categoryMap = new HashMap<String, Descriptor>();
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
 					resetDefaultColorCells();
-					var list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
+					var<String> list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
 							.getResult().stream().filter(r -> r.getContribution().item != null).map(r -> {
 								var categoryId = r.getContribution().item.category;
 								var cat = db.getDescriptor(Category.class, categoryId);
@@ -351,6 +392,26 @@ public class ProductDisplay {
 					nonCutoffAmount = selectCutoff.getSelection();
 					redraw(row2, true);
 				}
+			}
+		});
+	}
+
+	private void createRunCalculation(Composite row1, Composite row2) {
+		var runCalculation = new Button(row1, SWT.None);
+		runCalculation.setText("Run calculation");
+		runCalculation.addListener(SWT.Selection, new Listener() {
+			public void handleEvent(Event e) {
+				products = new ArrayList<>();
+				impactCategories.stream().forEach(item -> {
+					var cs = contributionResult.getProcessContributions(impactCategoryMap.get(item));
+					var p = new Product(cs, item);
+					products.add(p);
+				});
+
+				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() + 1);
+				sortProducts();
+				triggerComboSelection(selectCategory, true);
+				redraw(row2, true);
 			}
 		});
 	}
