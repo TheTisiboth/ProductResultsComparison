@@ -51,9 +51,9 @@ public class App {
 		var db = Derby.fromDataDir(dbName);
 		var productSystem = db.get(ProductSystem.class, "7c16aba1-a7d2-4559-b336-a2208a52a25d");
 		// CML-IA non-baseline
-//		var impactMethod = new ImpactMethodDao(db).getDescriptorForRefId("46f19b82-ee92-3ff9-b909-d7cab2647b16");
+		var impactMethod = new ImpactMethodDao(db).getDescriptorForRefId("46f19b82-ee92-3ff9-b909-d7cab2647b16");
 		// Boulay et al 2011(Human Health)
-		var impactMethod = new ImpactMethodDao(db).getDescriptorForRefId("3f290cab-a3ac-38af-b940-f31faf74cbe4");
+//		var impactMethod = new ImpactMethodDao(db).getDescriptorForRefId("3f290cab-a3ac-38af-b940-f31faf74cbe4");
 		var setup = new CalculationSetup(productSystem);
 		setup.impactMethod = impactMethod;
 		var calc = new SystemCalculator(db);

@@ -1,7 +1,7 @@
 package org.openlca.display;
 
 public enum ColorCellCriteria {
-	NONE(""), CATEGORY("Category"), LOCATION("Location"), AMOUNT("Amount");
+	NONE(""), CATEGORY("Category"), LOCATION("Location");
 
 	private String criteria;
 
@@ -12,9 +12,6 @@ public enum ColorCellCriteria {
 	public static ColorCellCriteria getCriteria(String c) {
 		for (ColorCellCriteria comparisonCriteria : values()) {
 			if (comparisonCriteria.criteria.equals(c)) {
-				if (c.equals("")) {
-					return AMOUNT;
-				}
 				return comparisonCriteria;
 			}
 		}

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.events.PaintListener;
@@ -37,6 +38,11 @@ import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
 import org.openlca.core.database.IDatabase;
+import org.openlca.core.database.ImpactCategoryDao;
+import org.openlca.core.database.ImpactMethodDao;
+import org.openlca.core.database.ProductSystemDao;
+import org.openlca.core.math.CalculationSetup;
+import org.openlca.core.math.SystemCalculator;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ProductSystem;
 import org.openlca.core.model.descriptors.Descriptor;
@@ -70,6 +76,7 @@ public class ProductDisplay {
 	private Table impactCategoryTable;
 	private Map<String, ImpactDescriptor> impactCategoryMap;
 	private List<String> impactCategories;
+	private TargetCalculationEnum targetCalculation;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
@@ -91,6 +98,7 @@ public class ProductDisplay {
 		nonCutoffAmount = 100;
 		cutOffSize = 25;
 		impactCategories = new ArrayList<>();
+		targetCalculation = TargetCalculationEnum.IMPACT;
 	}
 
 	/**
@@ -121,7 +129,6 @@ public class ProductDisplay {
 		 * VBar component
 		 */
 		vBar = canvas.getVerticalBar();
-		vBar.setMaximum(theoreticalScreenHeight);
 		vBar.setMinimum(0);
 
 		addScrollListener(canvas, vBar);
@@ -147,18 +154,16 @@ public class ProductDisplay {
 		l.setText("Target : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
 		c.setBounds(50, 50, 150, 65);
-		String values[] = { "", "Impact categories", "Product systems" };
+		String values[] = TargetCalculationEnum.valuesToString();
 		c.setItems(values);
+		var index = ArrayUtils.indexOf(values, targetCalculation.toString());
+		c.select(index);
 		c.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				var choice = c.getItem(c.getSelectionIndex());
-				ColorCellCriteria criteria = ColorCellCriteria.getCriteria(choice);
-				if (!colorCellCriteria.equals(criteria)) {
-					colorCellCriteria = criteria;
-					Product.updateComparisonCriteria(criteria);
-					products.stream().forEach(p -> p.updateCellsColor());
-					triggerComboSelection(selectCategory, true);
-					redraw(row2, true);
+				TargetCalculationEnum criteria = TargetCalculationEnum.getTarget(choice);
+				if (!targetCalculation.equals(criteria)) {
+					targetCalculation = criteria;
 				}
 			}
 		});
@@ -402,13 +407,26 @@ public class ProductDisplay {
 		runCalculation.addListener(SWT.Selection, new Listener() {
 			public void handleEvent(Event e) {
 				products = new ArrayList<>();
-				impactCategories.stream().forEach(item -> {
-					var cs = contributionResult.getProcessContributions(impactCategoryMap.get(item));
-					var p = new Product(cs, item);
-					products.add(p);
-				});
-
-				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() + 1);
+				if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
+					impactCategories.stream().forEach(item -> {
+						var cs = contributionResult.getProcessContributions(impactCategoryMap.get(item));
+						var p = new Product(cs, item);
+						products.add(p);
+					});
+				} else {
+					new ProductSystemDao(db).getAll().stream().forEach(ps -> {
+						var setup = new CalculationSetup(ps);
+						var calc = new SystemCalculator(db);
+						var fullResult = calc.calculateFull(setup);
+						var impactCategory = new ImpactCategoryDao(db)
+								.getDescriptorForRefId("d54f4770-5fb3-3acf-80dd-09b2acb6d4ed");
+						var cs = fullResult.getProcessContributions(impactCategory);
+						var p = new Product(cs, impactCategory.id + ": " + impactCategory.name);
+						products.add(p);
+					});
+				}
+				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
+				vBar.setMaximum(theoreticalScreenHeight);
 				sortProducts();
 				triggerComboSelection(selectCategory, true);
 				redraw(row2, true);
@@ -449,6 +467,10 @@ public class ProductDisplay {
 			}
 		}
 		canvas.redraw();
+		Rectangle client = canvas.getClientArea();
+		vBar.setThumb(Math.min(theoreticalScreenHeight, client.height));
+		vBar.setPageIncrement(Math.min(theoreticalScreenHeight, client.height));
+		vBar.setIncrement(20);
 	}
 
 	/**

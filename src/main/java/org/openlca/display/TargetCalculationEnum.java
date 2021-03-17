@@ -1,16 +1,16 @@
 package org.openlca.display;
 
-public enum TargetEnum {
+public enum TargetCalculationEnum {
 	IMPACT("Impact categories"), PRODUCT("Product systems");
 
 	private String criteria;
 
-	TargetEnum(String c) {
+	TargetCalculationEnum(String c) {
 		criteria = c;
 	}
 
-	public static TargetEnum getTarget(String c) {
-		for (TargetEnum comparisonCriteria : values()) {
+	public static TargetCalculationEnum getTarget(String c) {
+		for (TargetCalculationEnum comparisonCriteria : values()) {
 			if (comparisonCriteria.criteria.equals(c)) {
 				return comparisonCriteria;
 			}
