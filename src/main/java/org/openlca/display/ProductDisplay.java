@@ -582,6 +582,7 @@ public class ProductDisplay {
 			chunkSize = (int) Math.ceil(1 / gap);
 			gapEnoughBig = false;
 		}
+		int minCellWidth = 3;
 		Point start = null;
 		var newChunk = 0;
 		boolean isCutOff = true;
@@ -621,7 +622,10 @@ public class ProductDisplay {
 				var value = cell.getNormalizedAmount();
 				if (cellIndex >= amountCutOff) {
 					var percentage = value / totalAmountSumNonCutOff;
-					cellWidth = (int) (productWidth * nonCutOffRecangleSizeRation * percentage);
+					cellWidth = (int) ((productWidth - newProductWidth) * nonCutOffRecangleSizeRation * percentage);
+					if (cellWidth < minCellWidth) {
+						cellWidth = minCellWidth;
+					}
 				} else {
 					var percentage = value / normalizedTotalAmountSum;
 					cellWidth = (int) (productWidth * percentage);
@@ -630,10 +634,10 @@ public class ProductDisplay {
 			newProductWidth += cellWidth;
 			if (cellIndex >= amountCutOff) {
 				gc.setBackground(new Color(gc.getDevice(), cell.getRgb()));
-				gc.fillRectangle(start.x, start.y, (int) cellWidth, productHeight - 1);
+				gc.fillRectangle(start.x, start.y, cellWidth, productHeight - 1);
 				gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
 			}
-			var end = computeEndCell(start, cell, (int) cellWidth);
+			var end = computeEndCell(start, cell, (int) cellWidth, isCutOff);
 			if (gapEnoughBig || !gapEnoughBig && chunk != newChunk) {
 				// We end the current chunk / cell
 				start = end;
@@ -670,15 +674,11 @@ public class ProductDisplay {
 	 * @param cellWidth The width of the cell
 	 * @return The end point of the cell
 	 */
-	private Point computeEndCell(Point start, Cell cell, int cellWidth) {
+	private Point computeEndCell(Point start, Cell cell, int cellWidth, boolean isCutoff) {
 		var end = new Point(start.x + cellWidth, start.y);
 		var startingPoint = new Point((end.x + start.x) / 2, start.y + productHeight);
 		var endingPoint = new Point(startingPoint.x, start.y - 2);
-		cell.setData(startingPoint, endingPoint, start.x, end.x);
-		cell.setStartingLinkPoint(startingPoint);
-		cell.setEndingLinkPoint(endingPoint);
-		cell.setStartPixel(start.x);
-		cell.setEndPixel(end.x);
+		cell.setData(startingPoint, endingPoint, start.x, end.x, isCutoff);
 		return end;
 	}
 

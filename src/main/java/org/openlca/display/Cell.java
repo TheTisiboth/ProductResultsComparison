@@ -25,12 +25,14 @@ public class Cell {
 	private long minCategory, maxCategory;
 	private long minLocation, maxLocation;
 	static ColorCellCriteria criteria;
+	private boolean isCutoff;
 
-	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx) {
+	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx, boolean isCutoff) {
 		this.startingLinksPoint = startingLinksPoint;
 		this.endingLinkPoint = endingLinkPoint;
 		startPixel = startX;
 		endPixel = endx;
+		this.isCutoff = isCutoff;
 	}
 
 	public Point getStartingLinkPoint() {
@@ -61,6 +63,7 @@ public class Cell {
 		this.maxLocation = maxLocation;
 		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());
 		isDrawable = true;
+		isCutoff = false;
 		rgb = computeRGB();
 	}
 
@@ -138,7 +141,7 @@ public class Cell {
 	}
 
 	public boolean isLinkDrawable() {
-		return isDrawable;
+		return isDrawable && !isCutoff;
 	}
 
 	public int getStartPixel() {
