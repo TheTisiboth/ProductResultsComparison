@@ -20,6 +20,7 @@ import org.eclipse.swt.graphics.Path;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowLayout;
@@ -73,10 +74,11 @@ public class ProductDisplay {
 	private ProductSystem productSystem;
 	private ImpactMethodDescriptor impactMethod;
 	private String dbName;
-	private Table impactCategoryTable;
 	private Map<String, ImpactDescriptor> impactCategoryMap;
 	private List<String> impactCategories;
 	private TargetCalculationEnum targetCalculation;
+	private Composite impactCategoryTableComposite;
+	private Composite composite;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
@@ -164,6 +166,7 @@ public class ProductDisplay {
 				TargetCalculationEnum criteria = TargetCalculationEnum.getTarget(choice);
 				if (!targetCalculation.equals(criteria)) {
 					targetCalculation = criteria;
+					createImpactCategoryTable(composite);
 				}
 			}
 		});
@@ -177,19 +180,8 @@ public class ProductDisplay {
 	 */
 	private void createChoseImpactCategories(Composite row1, Composite row2) {
 		var b = new Button(row1, SWT.NONE);
-		var composite = new Composite(row1, SWT.BORDER);
-		impactCategoryTable = new Table(composite, SWT.CHECK | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
-		impactCategoryTable.addListener(SWT.Selection, new Listener() {
-			public void handleEvent(Event event) {
-				if (event.detail == SWT.CHECK) {
-					if (((TableItem) event.item).getChecked()) {
-						impactCategories.add(((TableItem) event.item).getText());
-					} else {
-						impactCategories.remove(((TableItem) event.item).getText());
-					}
-				}
-			}
-		});
+		composite = new Composite(row1, SWT.BORDER);
+		var impactCategoryTable = createImpactCategoryTable(composite);
 		impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
 			TableItem item = new TableItem(impactCategoryTable, SWT.BORDER);
 			item.setText(impactCategory.id + ": " + impactCategory.name);
@@ -214,6 +206,38 @@ public class ProductDisplay {
 		});
 		b.pack();
 		impactCategoryTable.setSize(300, 100);
+		row1.setSize(300, 100);
+//		row1.redraw();
+	}
+
+	private Table createImpactCategoryTable(Composite composite) {
+		int typeButton;
+		if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
+			typeButton = SWT.CHECK;
+		} else {
+			typeButton = SWT.RADIO;
+		}
+		var impactCategoryTable = new Table(composite, typeButton | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+		impactCategoryTable.addListener(SWT.Selection, new Listener() {
+			public void handleEvent(Event event) {
+				if (event.detail == SWT.CHECK) {
+					if (((TableItem) event.item).getChecked()) {
+						impactCategories.add(((TableItem) event.item).getText());
+					} else {
+						impactCategories.remove(((TableItem) event.item).getText());
+					}
+				} else {
+					var checked = ((TableItem) event.item).getChecked();
+					((TableItem) event.item).setChecked(!checked);
+					if (!checked) {
+						impactCategories.add(((TableItem) event.item).getText());
+					} else {
+						impactCategories.remove(((TableItem) event.item).getText());
+					}
+				}
+			}
+		});
+		return impactCategoryTable;
 	}
 
 	/**
@@ -410,18 +434,18 @@ public class ProductDisplay {
 				if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
 					impactCategories.stream().forEach(item -> {
 						var cs = contributionResult.getProcessContributions(impactCategoryMap.get(item));
-						var p = new Product(cs, item);
+						var p = new Product(cs, item, null);
 						products.add(p);
 					});
 				} else {
 					new ProductSystemDao(db).getAll().stream().forEach(ps -> {
 						var setup = new CalculationSetup(ps);
+						setup.impactMethod = impactMethod;
 						var calc = new SystemCalculator(db);
 						var fullResult = calc.calculateFull(setup);
-						var impactCategory = new ImpactCategoryDao(db)
-								.getDescriptorForRefId("d54f4770-5fb3-3acf-80dd-09b2acb6d4ed");
+						var impactCategory = impactCategoryMap.get(impactCategories.get(0));
 						var cs = fullResult.getProcessContributions(impactCategory);
-						var p = new Product(cs, impactCategory.id + ": " + impactCategory.name);
+						var p = new Product(cs, impactCategory.id + ": " + impactCategory.name, ps.id + ": " + ps.name);
 						products.add(p);
 					});
 				}
@@ -490,8 +514,10 @@ public class ProductDisplay {
 		Point textPos = new Point(5, 5);
 		gc.drawText("Database : " + dbName, textPos.x, textPos.y);
 		textPos.y += 30;
-		gc.drawText("Product system : " + productSystem.name, textPos.x, textPos.y);
-		textPos.y += 30;
+		if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
+			gc.drawText("Product system : " + productSystem.name, textPos.x, textPos.y);
+			textPos.y += 30;
+		}
 		gc.drawText("Impact assessment method : " + impactMethod.name, textPos.x, textPos.y);
 		var optional = products.stream()
 				.mapToDouble(p -> p.getList().stream().mapToDouble(c -> c.getNormalizedAmount()).sum()).max();
@@ -523,11 +549,15 @@ public class ProductDisplay {
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
 		gc.drawText("Contribution result " + productIndex, textPos.x, textPos.y);
 		textPos.y += 25;
-		gc.drawText("Impact : " + p.getName(), textPos.x, textPos.y);
+		if (TargetCalculationEnum.PRODUCT.equals(targetCalculation)) {
+			gc.drawText("Product System : " + p.getProductSystemName(), textPos.x, textPos.y);
+			textPos.y += 25;
+		}
+		gc.drawText("Impact : " + p.getImpactCategoryName(), textPos.x, textPos.y);
 		productWidth = handleCells(gc, rectEdge, productIndex, p, productWidth, maxSumAmount);
 
 		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
-			Point startPoint = new Point(rectEdge.x - 20, rectEdge.y - 50);
+			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
 			Point endPoint = new Point((int) (startPoint.x + maxProductWidth), startPoint.y);
 			drawLine(gc, startPoint, endPoint, null, null);
 			startPoint = new Point(endPoint.x - 15, endPoint.y + 15);
@@ -552,25 +582,32 @@ public class ProductDisplay {
 	 * @return The new product width
 	 */
 	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxSumAmount) {
-		// TODO
-		// Fix proportional size of cells
 		var cells = p.getList();
 		// Sum all the distincts values
 		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getNormalizedAmount()))
 				.sum();
 		System.out.println("Product " + productIndex + " : " + normalizedTotalAmountSum + " amounts sum");
 		int minimumProductWidth = (int) (0.3 * productWidth);
-		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxSumAmount));
+//		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxSumAmount));
 		if (productWidth < minimumProductWidth) {
 			// We set a minimum width, so the rectangle is not too small (in case
 			// of big differences )
 			productWidth = minimumProductWidth;
 		}
+		var wrapper = new Object() {
+			int width;
+		};
+		wrapper.width = productWidth;
 		long amountCutOff = cells.size() - nonCutoffAmount;
 		double totalAmountSumNonCutOff = cells.stream().skip(amountCutOff)
 				.mapToDouble(cell -> Math.abs(cell.getNormalizedAmount())).sum();
+
 		double cutoffRectangleSizeRatio = cutOffSize / 100.0;
-		double nonCutOffRecangleSizeRation = 1 - cutoffRectangleSizeRatio;
+		double nonCutOffRecangleSizeRatio = 1 - cutoffRectangleSizeRatio;
+		long amountNonCutOffBigEnoughContribution = cells.stream().skip(amountCutOff)
+				.filter(cell -> Math.abs(cell.getNormalizedAmount()) * totalAmountSumNonCutOff
+						* nonCutOffRecangleSizeRatio * wrapper.width > 1)
+				.count();
 		// Minimum space between each cells
 		double gap = (productWidth * cutoffRectangleSizeRatio / amountCutOff);
 		int chunk = -1, chunkSize = 0;
@@ -587,6 +624,9 @@ public class ProductDisplay {
 		var newChunk = 0;
 		boolean isCutOff = true;
 		RGB rgbCutOff = new RGB(192, 192, 192);
+		int cutOffSize = 0;
+		int nonCutoffSize = 0;
+		int nonCutoffBigEnoughSize = 0;
 		for (var cellIndex = 0; cellIndex < cells.size(); cellIndex++) {
 			if (start == null) {
 				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
@@ -596,11 +636,15 @@ public class ProductDisplay {
 					isCutOff = false;
 					gc.setBackground(new Color(gc.getDevice(), rgbCutOff));
 					gc.fillRectangle(rectEdge.x + 1, rectEdge.y + 1, (int) newProductWidth, productHeight - 1);
+					cutOffSize = (int) newProductWidth;
+					nonCutoffSize = productWidth - cutOffSize;
+					nonCutoffBigEnoughSize = (int) (nonCutoffSize
+							- (nonCutoffAmount - amountNonCutOffBigEnoughContribution) * minCellWidth);
 					gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
 					chunk = -1;
 					chunkSize = 0;
 					gapEnoughBig = true;
-					gap = (productWidth * nonCutOffRecangleSizeRation / (cells.size() - amountCutOff));
+					gap = (productWidth * nonCutOffRecangleSizeRatio / (cells.size() - amountCutOff));
 					if (gap < 1.0) {
 						chunkSize = (int) Math.ceil(1 / gap);
 						gapEnoughBig = false;
@@ -621,15 +665,22 @@ public class ProductDisplay {
 			} else {
 				var value = cell.getNormalizedAmount();
 				if (cellIndex >= amountCutOff) {
-					var percentage = value / totalAmountSumNonCutOff;
-					cellWidth = (int) ((productWidth - newProductWidth) * nonCutOffRecangleSizeRation * percentage);
-					if (cellWidth < minCellWidth) {
-						cellWidth = minCellWidth;
+					if (cellIndex == cells.size() - 1) {
+						cellWidth = (int) (productWidth - newProductWidth);
+					} else {
+						var percentage = value / totalAmountSumNonCutOff;
+						cellWidth = (int) (productWidth * nonCutOffRecangleSizeRatio * percentage);
+						if (cellWidth < minCellWidth) {
+							cellWidth = minCellWidth;
+						} else {
+							cellWidth = (int) (nonCutoffBigEnoughSize * percentage);
+						}
 					}
 				} else {
 					var percentage = value / normalizedTotalAmountSum;
 					cellWidth = (int) (productWidth * percentage);
 				}
+
 			}
 			newProductWidth += cellWidth;
 			if (cellIndex >= amountCutOff) {

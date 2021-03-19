@@ -11,7 +11,8 @@ import org.openlca.core.results.Contribution;
 public class Product {
 
 	private ArrayList<Cell> list;
-	private String name;
+	private String impactCategoryName;
+	private String productSystemName;
 	static ColorCellCriteria criteria;
 	static Config config;
 	private long minProcessId, maxProcessId;
@@ -19,8 +20,9 @@ public class Product {
 	private long minCategory, maxCategory;
 	private long minLocation, maxLocation;
 
-	public Product(List<Contribution<CategorizedDescriptor>> l, String n) {
-		name = n;
+	public Product(List<Contribution<CategorizedDescriptor>> l, String n, String productSystemName) {
+		impactCategoryName = n;
+		this.productSystemName = productSystemName;
 		list = new ArrayList<>();
 		Result.criteria = criteria;
 		maxProcessId = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
@@ -49,8 +51,12 @@ public class Product {
 		Cell.criteria = c;
 	}
 
-	public String getName() {
-		return name;
+	public String getImpactCategoryName() {
+		return impactCategoryName;
+	}
+	
+	public String getProductSystemName() {
+		return productSystemName;
 	}
 
 	public ArrayList<Cell> getList() {

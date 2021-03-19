@@ -115,7 +115,7 @@ public class Cell {
 		}
 		if (percentage > 100.0) { // It happens because of uncertainty of division
 			percentage = 100.0;
-		} else if (percentage == -1 || value == 0.0) {
+		} else if (percentage == -1 || result.get(0).getContribution().amount == 0.0) {
 			isDrawable = false;
 			return new RGB(192, 192, 192); // Grey color for unfocused values (0 or null)
 		}
