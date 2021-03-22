@@ -20,7 +20,6 @@ import org.eclipse.swt.graphics.Path;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
-import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowLayout;
@@ -33,14 +32,11 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
-import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
 import org.openlca.core.database.IDatabase;
-import org.openlca.core.database.ImpactCategoryDao;
-import org.openlca.core.database.ImpactMethodDao;
 import org.openlca.core.database.ProductSystemDao;
 import org.openlca.core.math.CalculationSetup;
 import org.openlca.core.math.SystemCalculator;
@@ -62,11 +58,9 @@ public class ProductDisplay {
 	private final int gapBetweenProduct;
 	private int theoreticalScreenHeight;
 	private ColorCellCriteria colorCellCriteria;
-	private Canvas canvas;
 	private Map<ColorCellCriteria, Image> cacheMap;
 	private Combo selectCategory;
 	private Color chosenColor;
-	private ScrollBar vBar;
 	private ContributionResult contributionResult;
 	private int nonCutoffAmount;
 	private int cutOffSize;
@@ -77,7 +71,6 @@ public class ProductDisplay {
 	private Map<String, ImpactDescriptor> impactCategoryMap;
 	private List<String> impactCategories;
 	private TargetCalculationEnum targetCalculation;
-	private Composite impactCategoryTableComposite;
 	private Composite composite;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
@@ -94,7 +87,6 @@ public class ProductDisplay {
 		productHeight = 30;
 		gapBetweenProduct = 300;
 		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 2;
-		canvas = null;
 		colorCellCriteria = config.colorCellCriteria;
 		cacheMap = new HashMap<>();
 		nonCutoffAmount = 100;
@@ -124,34 +116,41 @@ public class ProductDisplay {
 		/**
 		 * Canvas component
 		 */
-		canvas = new Canvas(row2, SWT.V_SCROLL);
+		var canvas = new Canvas(row2, SWT.V_SCROLL);
 		canvas.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
 		/**
 		 * VBar component
 		 */
-		vBar = canvas.getVerticalBar();
+		var vBar = canvas.getVerticalBar();
 		vBar.setMinimum(0);
 
-		addScrollListener(canvas, vBar);
-		addResizeEvent(row2, canvas, vBar);
+		addScrollListener(canvas);
+		addResizeEvent(row2, canvas);
 
 		row1.setLayout(new RowLayout());
 
 		addPaintListener(canvas); // Once finished, we really paint the cache, so it avoids flickering
 
-		createChooseTarget(row1, row2);
-		createChoseImpactCategories(row1, row2);
-		createAgregateCombo(row1, row2);
-		createColorPicker(row1);
-		createSelectedCategory(row1, row2);
-		createSelectCutoffSize(row1, row2);
-		createSelectAmountVisibleProcess(row1, row2);
-		createRunCalculation(row1, row2);
+		chooseTargetMenu(row1, row2);
+		chooseImpactCategoriesMenu(row1, row2);
+		colorByCriteriaMenu(row1, row2, canvas);
+		colorPickerMenu(row1);
+		selectCategoryMenu(row1, row2, canvas);
+		selectCutoffSizeMenu(row1, row2, canvas);
+		selectAmountVisibleProcessMenu(row1, row2, canvas);
+		runCalculationButton(row1, row2, canvas);
 
 	}
 
-	private void createChooseTarget(Composite row1, Composite row2) {
+	/**
+	 * Allow to choose a target : either display contributions results for each
+	 * impact category, or for each product system
+	 * 
+	 * @param row1 The menu bar
+	 * @param row2 The canvas
+	 */
+	private void chooseTargetMenu(Composite row1, Composite row2) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Target : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
@@ -166,7 +165,7 @@ public class ProductDisplay {
 				TargetCalculationEnum criteria = TargetCalculationEnum.getTarget(choice);
 				if (!targetCalculation.equals(criteria)) {
 					targetCalculation = criteria;
-					createImpactCategoryTable(composite);
+					impactCategoryTable(composite);
 				}
 			}
 		});
@@ -178,10 +177,10 @@ public class ProductDisplay {
 	 * @param row1 The menu bar
 	 * @param row2 The canvas
 	 */
-	private void createChoseImpactCategories(Composite row1, Composite row2) {
+	private void chooseImpactCategoriesMenu(Composite row1, Composite row2) {
 		var b = new Button(row1, SWT.NONE);
 		composite = new Composite(row1, SWT.BORDER);
-		var impactCategoryTable = createImpactCategoryTable(composite);
+		var impactCategoryTable = impactCategoryTable(composite);
 		impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
 			TableItem item = new TableItem(impactCategoryTable, SWT.BORDER);
 			item.setText(impactCategory.id + ": " + impactCategory.name);
@@ -207,10 +206,16 @@ public class ProductDisplay {
 		b.pack();
 		impactCategoryTable.setSize(300, 100);
 		row1.setSize(300, 100);
-//		row1.redraw();
 	}
 
-	private Table createImpactCategoryTable(Composite composite) {
+	/**
+	 * Table containing the whole impact categories, that allow us to check them or
+	 * not
+	 * 
+	 * @param composite The parent component
+	 * @return This table
+	 */
+	private Table impactCategoryTable(Composite composite) {
 		int typeButton;
 		if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
 			typeButton = SWT.CHECK;
@@ -241,12 +246,14 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Dropdown menu, allow us to chose by what we want to agregate the contribution
-	 * results
+	 * Dropdown menu, allow us to chose by what criteria we want to color the cells
+	 * : either by product (default), product category or location
 	 * 
-	 * @param row1 The menu bar
+	 * @param row1   The menu bar
+	 * @param row2   The second part of the display
+	 * @param canvas The canvas
 	 */
-	private void createAgregateCombo(Composite row1, Composite row2) {
+	private void colorByCriteriaMenu(Composite row1, Composite row2, Canvas canvas) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Color cells by : ");
 		final Combo c = new Combo(row1, SWT.READ_ONLY);
@@ -262,7 +269,7 @@ public class ProductDisplay {
 					Product.updateComparisonCriteria(criteria);
 					products.stream().forEach(p -> p.updateCellsColor());
 					triggerComboSelection(selectCategory, true);
-					redraw(row2, true);
+					redraw(row2, true, canvas);
 				}
 			}
 		});
@@ -271,14 +278,15 @@ public class ProductDisplay {
 	/**
 	 * Dropdown menu, allow us to chose a specific Process Category to color
 	 * 
-	 * @param row1 The menu bar
-	 * @param row2 The canvas
+	 * @param row1   The menu bar
+	 * @param row2   The second part of the display
+	 * @param canvas The canvas
 	 */
-	private void createSelectedCategory(Composite row1, Composite row2) {
+	private void selectCategoryMenu(Composite row1, Composite row2, Canvas canvas) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Select Product Category : ");
 		selectCategory = new Combo(row1, SWT.READ_ONLY);
-		selectCategory.setBounds(50, 50, 500, 65);
+		selectCategory.setBounds(50, 50, 550, 65);
 		var<String, Descriptor> categoryMap = new HashMap<String, Descriptor>();
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
@@ -297,7 +305,7 @@ public class ProductDisplay {
 					selectCategory.setItems(list.toArray(String[]::new));
 				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
 					resetDefaultColorCells();
-					redraw(row2, true);
+					redraw(row2, true, canvas);
 				} else { // A category is selected : update color
 					resetDefaultColorCells();
 					var catId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
@@ -306,7 +314,7 @@ public class ProductDisplay {
 							c.setRgb(chosenColor.getRGB());
 						}
 					}));
-					redraw(row2, true);
+					redraw(row2, true, canvas);
 				}
 			}
 		});
@@ -343,7 +351,7 @@ public class ProductDisplay {
 	 * 
 	 * @param composite The parent component
 	 */
-	private void createColorPicker(Composite composite) {
+	private void colorPickerMenu(Composite composite) {
 		// Default color
 		chosenColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
 		// Use a label full of spaces to show the color
@@ -378,10 +386,11 @@ public class ProductDisplay {
 	/**
 	 * Spinner allowing to set the ratio of the cutoff area
 	 * 
-	 * @param row1 The menu bar
-	 * @param row2 The canvas
+	 * @param row1   The menu bar
+	 * @param row2   The second part of the display
+	 * @param canvas The canvas
 	 */
-	private void createSelectCutoffSize(Composite row1, Composite row2) {
+	private void selectCutoffSizeMenu(Composite row1, Composite row2, Canvas canvas) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Select cutoff size (%): ");
 		var selectCutoff = new Spinner(row1, SWT.BORDER);
@@ -394,7 +403,7 @@ public class ProductDisplay {
 			public void handleEvent(Event e) {
 				if (e.keyCode == 13) { // If we press Enter
 					cutOffSize = selectCutoff.getSelection();
-					redraw(row2, true);
+					redraw(row2, true, canvas);
 				}
 			}
 		});
@@ -403,10 +412,11 @@ public class ProductDisplay {
 	/**
 	 * Spinner allowing to set the amount of visible process
 	 * 
-	 * @param row1 The menu bar
-	 * @param row2 The canvas
+	 * @param row1   The menu bar
+	 * @param row2   The second part of the display
+	 * @param canvas The canvas
 	 */
-	private void createSelectAmountVisibleProcess(Composite row1, Composite row2) {
+	private void selectAmountVisibleProcessMenu(Composite row1, Composite row2, Canvas canvas) {
 		final Label l = new Label(row1, SWT.NONE);
 		l.setText("Select amount non cutoff process: ");
 		var selectCutoff = new Spinner(row1, SWT.BORDER);
@@ -419,13 +429,21 @@ public class ProductDisplay {
 			public void handleEvent(Event arg0) {
 				if (arg0.keyCode == 13) { // If we press Enter
 					nonCutoffAmount = selectCutoff.getSelection();
-					redraw(row2, true);
+					redraw(row2, true, canvas);
 				}
 			}
 		});
 	}
 
-	private void createRunCalculation(Composite row1, Composite row2) {
+	/**
+	 * Run the calculation, according to the selected values
+	 * 
+	 * @param row1   The menu bar
+	 * @param row2   The second part of the display
+	 * @param canvas The canvas
+	 */
+	private void runCalculationButton(Composite row1, Composite row2, Canvas canvas) {
+		var vBar = canvas.getVerticalBar();
 		var runCalculation = new Button(row1, SWT.None);
 		runCalculation.setText("Run calculation");
 		runCalculation.addListener(SWT.Selection, new Listener() {
@@ -453,7 +471,7 @@ public class ProductDisplay {
 				vBar.setMaximum(theoreticalScreenHeight);
 				sortProducts();
 				triggerComboSelection(selectCategory, true);
-				redraw(row2, true);
+				redraw(row2, true, canvas);
 			}
 		});
 	}
@@ -471,8 +489,10 @@ public class ProductDisplay {
 	 * 
 	 * @param recompute Tell if we have to recompute the categories. If false, then
 	 *                  we just redraw the whole objects
+	 * @param canvas    The canvas
 	 */
-	private void redraw(Composite composite, boolean recompute) {
+	private void redraw(Composite composite, boolean recompute, Canvas canvas) {
+		var vBar = canvas.getVerticalBar();
 		screenSize = shell.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
@@ -508,7 +528,7 @@ public class ProductDisplay {
 	private void cachedPaint(Composite composite, Image cache) {
 		GC gc = new GC(cache);
 		screenSize = composite.getSize(); // Responsive behavior
-		double maxProductWidth = screenSize.x * 0.85; // 90% of the screen width
+		double maxProductWidth = screenSize.x * 0.85; // 85% of the screen width
 		// Start point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		Point textPos = new Point(5, 5);
@@ -540,7 +560,7 @@ public class ProductDisplay {
 	 * @param maxProductWidth The maximal width for a product
 	 * @param rectEdge        The coordinate of the product rectangle
 	 * @param productIndex    The index of the current product
-	 * @param maxAmount       The max amounts sum of the products
+	 * @param maxSumAmount    The max amounts sum of the products
 	 */
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, double maxSumAmount) {
 		var p = products.get(productIndex);
@@ -644,8 +664,8 @@ public class ProductDisplay {
 					chunk = -1;
 					chunkSize = 0;
 					gapEnoughBig = true;
-					gap = (productWidth * nonCutOffRecangleSizeRatio / (cells.size() - amountCutOff));
-					if (gap < 1.0) {
+					gap = ((double) nonCutoffSize / (cells.size() - amountCutOff));
+					if (gap < 1.0 || nonCutoffBigEnoughSize < 0) {
 						chunkSize = (int) Math.ceil(1 / gap);
 						gapEnoughBig = false;
 					}
@@ -658,7 +678,10 @@ public class ProductDisplay {
 			int cellWidth = 0;
 			if (!gapEnoughBig && chunk != newChunk) {
 				// We are on a new chunk, so we draw a cell with a width of 1 pixel
-				cellWidth = 1;
+				cellWidth = (int) gap;
+				if (cellWidth == 0) {
+					cellWidth = 1;
+				}
 			} else if (!gapEnoughBig && chunk == newChunk) {
 				// We stay on the same chunk, so we don't draw the cell
 				cellWidth = 0;
@@ -811,9 +834,9 @@ public class ProductDisplay {
 	 * Add a scroll listener to the canvas
 	 * 
 	 * @param canvas The canvas component
-	 * @param vBar   The scrolling vertical bar
 	 */
-	private void addScrollListener(Canvas canvas, ScrollBar vBar) {
+	private void addScrollListener(Canvas canvas) {
+		var vBar = canvas.getVerticalBar();
 		vBar.addListener(SWT.Selection, new Listener() {
 			@Override
 			public void handleEvent(Event event) {
@@ -830,9 +853,9 @@ public class ProductDisplay {
 	 * 
 	 * @param composite Parent composent of the canvas
 	 * @param canvas    The Canvas component
-	 * @param vBar      The scrolling vertical bar
 	 */
-	private void addResizeEvent(Composite composite, Canvas canvas, ScrollBar vBar) {
+	private void addResizeEvent(Composite composite, Canvas canvas) {
+		var vBar = canvas.getVerticalBar();
 		canvas.addListener(SWT.Resize, new Listener() {
 			@Override
 			public void handleEvent(Event e) {
@@ -847,7 +870,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(composite, true);
+				redraw(composite, true, canvas);
 			}
 		});
 	}
