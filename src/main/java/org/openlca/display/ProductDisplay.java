@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -42,9 +43,11 @@ import org.openlca.core.math.CalculationSetup;
 import org.openlca.core.math.SystemCalculator;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ProductSystem;
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.core.model.descriptors.ImpactDescriptor;
 import org.openlca.core.model.descriptors.ImpactMethodDescriptor;
+import org.openlca.core.results.Contribution;
 import org.openlca.core.results.ContributionResult;
 
 public class ProductDisplay {
@@ -58,7 +61,7 @@ public class ProductDisplay {
 	private final int gapBetweenProduct;
 	private int theoreticalScreenHeight;
 	private ColorCellCriteria colorCellCriteria;
-	private Map<ColorCellCriteria, Image> cacheMap;
+	private Map<Integer, Image> cacheMap;
 	private Combo selectCategory;
 	private Color chosenColor;
 	private ContributionResult contributionResult;
@@ -72,12 +75,18 @@ public class ProductDisplay {
 	private List<String> impactCategories;
 	private TargetCalculationEnum targetCalculation;
 	private Composite composite;
+	private boolean isCalculationRun;
+	private long chosenCategoryId;
+	private Map<Integer, Map<Integer, List<Contribution<CategorizedDescriptor>>>> contributionResultMap;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
 		this.db = data.db;
 		this.shell = shell;
 		this.config = config;
+		contributionResultMap = new HashMap<>();
+		chosenCategoryId = -1;
+		isCalculationRun = false;
 		productSystem = data.productSystem;
 		impactMethod = data.impactMethod;
 		products = new ArrayList<>();
@@ -86,7 +95,7 @@ public class ProductDisplay {
 		xMargin = 200;
 		productHeight = 30;
 		gapBetweenProduct = 300;
-		theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * 2;
+		theoreticalScreenHeight = xMargin * 2 + gapBetweenProduct * 2;
 		colorCellCriteria = config.colorCellCriteria;
 		cacheMap = new HashMap<>();
 		nonCutoffAmount = 100;
@@ -269,7 +278,7 @@ public class ProductDisplay {
 					Product.updateComparisonCriteria(criteria);
 					products.stream().forEach(p -> p.updateCellsColor());
 					triggerComboSelection(selectCategory, true);
-					redraw(row2, true, canvas);
+					redraw(row2, canvas);
 				}
 			}
 		});
@@ -291,6 +300,7 @@ public class ProductDisplay {
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
+					chosenCategoryId = -1;
 					resetDefaultColorCells();
 					var<String> list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
 							.getResult().stream().filter(r -> r.getContribution().item != null).map(r -> {
@@ -304,17 +314,18 @@ public class ProductDisplay {
 					list.add(0, "");
 					selectCategory.setItems(list.toArray(String[]::new));
 				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
+					chosenCategoryId = 0;
 					resetDefaultColorCells();
-					redraw(row2, true, canvas);
+					redraw(row2, canvas);
 				} else { // A category is selected : update color
 					resetDefaultColorCells();
-					var catId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
+					chosenCategoryId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
 					products.stream().forEach(p -> p.getList().stream().forEach(c -> {
-						if (c.getResult().get(0).getContribution().item.category == catId) {
+						if (c.getResult().get(0).getContribution().item.category == chosenCategoryId) {
 							c.setRgb(chosenColor.getRGB());
 						}
 					}));
-					redraw(row2, true, canvas);
+					redraw(row2, canvas);
 				}
 			}
 		});
@@ -403,7 +414,7 @@ public class ProductDisplay {
 			public void handleEvent(Event e) {
 				if (e.keyCode == 13) { // If we press Enter
 					cutOffSize = selectCutoff.getSelection();
-					redraw(row2, true, canvas);
+					redraw(row2, canvas);
 				}
 			}
 		});
@@ -429,7 +440,7 @@ public class ProductDisplay {
 			public void handleEvent(Event arg0) {
 				if (arg0.keyCode == 13) { // If we press Enter
 					nonCutoffAmount = selectCutoff.getSelection();
-					redraw(row2, true, canvas);
+					redraw(row2, canvas);
 				}
 			}
 		});
@@ -450,28 +461,50 @@ public class ProductDisplay {
 			public void handleEvent(Event e) {
 				products = new ArrayList<>();
 				if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
+					var productSystemResults = contributionResultMap.get(productSystem.hashCode());
+					if (productSystemResults == null) {
+						productSystemResults = new HashMap<>();
+						contributionResultMap.put(productSystem.hashCode(), productSystemResults);
+					}
 					impactCategories.stream().forEach(item -> {
-						var cs = contributionResult.getProcessContributions(impactCategoryMap.get(item));
-						var p = new Product(cs, item, null);
+						var psResults = contributionResultMap.get(productSystem.hashCode());
+						var impactDescriptor = impactCategoryMap.get(item);
+						var contributionList = psResults.get(impactDescriptor.hashCode());
+						if (contributionList == null) {
+							contributionList = contributionResult.getProcessContributions(impactDescriptor);
+							psResults.put(impactDescriptor.hashCode(), contributionList);
+						}
+						var p = new Product(contributionList, item, null);
 						products.add(p);
 					});
 				} else {
 					new ProductSystemDao(db).getAll().stream().forEach(ps -> {
-						var setup = new CalculationSetup(ps);
-						setup.impactMethod = impactMethod;
-						var calc = new SystemCalculator(db);
-						var fullResult = calc.calculateFull(setup);
-						var impactCategory = impactCategoryMap.get(impactCategories.get(0));
-						var cs = fullResult.getProcessContributions(impactCategory);
-						var p = new Product(cs, impactCategory.id + ": " + impactCategory.name, ps.id + ": " + ps.name);
+						var psResults = contributionResultMap.get(productSystem.hashCode());
+						if (psResults == null) {
+							psResults = new HashMap<>();
+							contributionResultMap.put(productSystem.hashCode(), psResults);
+						}
+						var impactDescriptor = impactCategoryMap.get(impactCategories.get(0));
+						var contributionList = psResults.get(impactDescriptor.hashCode());
+						if (contributionList == null) {
+							var setup = new CalculationSetup(ps);
+							setup.impactMethod = impactMethod;
+							var calc = new SystemCalculator(db);
+							var fullResult = calc.calculateFull(setup);
+							contributionList = fullResult.getProcessContributions(impactDescriptor);
+							psResults.put(impactDescriptor.hashCode(), contributionList);
+						}
+						var p = new Product(contributionList, impactDescriptor.id + ": " + impactDescriptor.name,
+								ps.id + ": " + ps.name);
 						products.add(p);
 					});
 				}
-				theoreticalScreenHeight = xMargin * 2 + (productHeight + gapBetweenProduct) * (products.size() - 1);
+				isCalculationRun = true;
+				theoreticalScreenHeight = xMargin * 2 + gapBetweenProduct * (products.size() - 1);
 				vBar.setMaximum(theoreticalScreenHeight);
 				sortProducts();
 				triggerComboSelection(selectCategory, true);
-				redraw(row2, true, canvas);
+				redraw(row2, canvas);
 			}
 		});
 	}
@@ -491,30 +524,30 @@ public class ProductDisplay {
 	 *                  we just redraw the whole objects
 	 * @param canvas    The canvas
 	 */
-	private void redraw(Composite composite, boolean recompute, Canvas canvas) {
+	private void redraw(Composite composite, Canvas canvas) {
 		var vBar = canvas.getVerticalBar();
 		screenSize = shell.getSize();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
 		Image cache = null;
-		if (recompute) { // If we recompute, we draw a brand new Image
+
+		// Otherwise, we take a cached Image
+		var hash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
+				nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
+		cache = cacheMap.get(hash);
+		if (cache == null) {
 			cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-			cacheMap.put(colorCellCriteria, cache);
 			cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
-		} else {
-			// Otherwise, we take a cached Image
-			cache = cacheMap.get(colorCellCriteria);
-			if (cache == null) {
-				cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-				cacheMap.put(colorCellCriteria, cache);
-				cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
-			}
+			var newHash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
+					nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
+			cacheMap.put(newHash, cache);
 		}
-		canvas.redraw();
+
 		Rectangle client = canvas.getClientArea();
 		vBar.setThumb(Math.min(theoreticalScreenHeight, client.height));
 		vBar.setPageIncrement(Math.min(theoreticalScreenHeight, client.height));
 		vBar.setIncrement(20);
+		canvas.redraw();
 	}
 
 	/**
@@ -624,6 +657,10 @@ public class ProductDisplay {
 	 */
 	private int handleCutOff(List<Cell> cells, int remainingProductWidth, Point rectEdge, GC gc,
 			long cutOffProcessAmount) {
+		Point start = new Point(rectEdge.x + 1, rectEdge.y + 1);
+		if (cutOffSize == 0) {
+			return handleNotBigEnoughProcess(cells, remainingProductWidth, rectEdge, gc, cutOffProcessAmount, start, 0);
+		}
 		RGB rgbCutOff = new RGB(192, 192, 192); // Color for cutoff area
 		double cutoffRectangleSizeRatio = cutOffSize / 100.0;
 		int productCutOffWidth = 0;
@@ -632,7 +669,6 @@ public class ProductDisplay {
 		} else {
 			productCutOffWidth = (int) (remainingProductWidth * cutoffRectangleSizeRatio);
 		}
-		Point start = new Point(rectEdge.x + 1, rectEdge.y + 1);
 		double normalizedCutOffAmountSum = cells.stream().limit(cutOffProcessAmount)
 				.mapToDouble(cell -> Math.abs(cell.getNormalizedAmount())).sum();
 		double minimumGapBetweenCells = ((double) productCutOffWidth / cutOffProcessAmount);
@@ -971,7 +1007,7 @@ public class ProductDisplay {
 						vSelection = 0;
 					origin.y = -vSelection;
 				}
-				redraw(composite, true, canvas);
+				redraw(composite, canvas);
 			}
 		});
 	}
@@ -985,7 +1021,10 @@ public class ProductDisplay {
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				e.gc.drawImage(cacheMap.get(colorCellCriteria), origin.x, origin.y);
+				var hash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
+						nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
+				var cache = cacheMap.get(hash);
+				e.gc.drawImage(cache, origin.x, origin.y);
 			}
 		});
 	}

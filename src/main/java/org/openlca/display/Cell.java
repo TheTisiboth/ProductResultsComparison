@@ -8,6 +8,7 @@ import org.eclipse.swt.graphics.RGB;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
+import org.openlca.util.Pair;
 
 public class Cell {
 
@@ -18,14 +19,11 @@ public class Cell {
 	private Point endingLinkPoint;
 	private boolean isDrawable;
 	static Config config;
-	private long minProcessId;
-	private long maxProcessId;
 	private List<Result> result;
-	private double minAmount, maxAmount;
-	private long minCategory, maxCategory;
-	private long minLocation, maxLocation;
+	private double minAmount;
 	static ColorCellCriteria criteria;
 	private boolean isCutoff;
+	private Product product;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx, boolean isCutoff) {
 		this.startingLinksPoint = startingLinksPoint;
@@ -51,16 +49,9 @@ public class Cell {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Cell(List<Contribution<CategorizedDescriptor>> contributions, long min, long max, double minAmount,
-			double maxAmount, long minCategory, long maxCategory, long minLocation, long maxLocation) {
-		this.minProcessId = min;
-		this.maxProcessId = max;
+	public Cell(List<Contribution<CategorizedDescriptor>> contributions, double minAmount, Product p) {
 		this.minAmount = minAmount;
-		this.maxAmount = maxAmount;
-		this.minCategory = minCategory;
-		this.maxCategory = maxCategory;
-		this.minLocation = minLocation;
-		this.maxLocation = maxLocation;
+		product = p;
 		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());
 		isDrawable = true;
 		isCutoff = false;
@@ -91,21 +82,25 @@ public class Cell {
 		double percentage = 0;
 		long value = 0;
 		long min = 0, max = 0;
+		Pair<Long, Long> pair = null;
 		switch (criteria) {
 		case LOCATION:
 			value = ((ProcessDescriptor) result.get(0).getContribution().item).location;
-			min = minLocation;
-			max = maxLocation;
+			pair = product.getMinMaxLocation();
+			min = pair.first;
+			max = pair.second;
 			break;
 		case CATEGORY:
 			value = result.get(0).getContribution().item.category;
-			min = minCategory;
-			max = maxCategory;
+			pair = product.getMinMaxCategory();
+			min = pair.first;
+			max = pair.second;
 			break;
 		default:
 			value = result.get(0).getContribution().item.id;
-			min = minProcessId;
-			max = maxProcessId;
+			pair = product.getMinMaxProcessId();
+			min = pair.first;
+			max = pair.second;
 			break;
 		}
 		try {

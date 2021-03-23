@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
+import org.openlca.util.Pair;
 
 public class Product {
 
@@ -15,30 +16,51 @@ public class Product {
 	private String productSystemName;
 	static ColorCellCriteria criteria;
 	static Config config;
-	private long minProcessId, maxProcessId;
-	private double minAmount, maxAmount;
-	private long minCategory, maxCategory;
-	private long minLocation, maxLocation;
+	long minProcessId = -1, maxProcessId = -1;
+	double minAmount;
+	long minCategory = -1, maxCategory = -1;
+	long minLocation = -1, maxLocation = -1;
+	private List<Contribution<CategorizedDescriptor>> contributions;
 
 	public Product(List<Contribution<CategorizedDescriptor>> l, String n, String productSystemName) {
+		contributions = l;
 		impactCategoryName = n;
 		this.productSystemName = productSystemName;
 		list = new ArrayList<>();
 		Result.criteria = criteria;
-		maxProcessId = l.stream().mapToLong(c -> c.item.id).max().getAsLong();
-		minProcessId = l.stream().mapToLong(c -> c.item.id).min().getAsLong();
+
 		minAmount = l.stream().mapToDouble(c -> c.amount).min().getAsDouble();
-		maxAmount = l.stream().mapToDouble(c -> c.amount).max().getAsDouble();
-		minCategory = l.stream().mapToLong(c -> c.item.category).min().getAsLong();
-		maxCategory = l.stream().mapToLong(c -> c.item.category).max().getAsLong();
-		minLocation = l.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).min().getAsLong();
-		maxLocation = l.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).max().getAsLong();
 		for (Contribution<CategorizedDescriptor> contribution : l) {
 			List<Contribution<CategorizedDescriptor>> contributions = new ArrayList<>();
 			contributions.add(contribution);
-			list.add(new Cell(contributions, minProcessId, maxProcessId, minAmount, maxAmount, minCategory, maxCategory,
-					minLocation, maxLocation));
+			list.add(new Cell(contributions, minAmount, this));
 		}
+	}
+
+	public Pair<Long, Long> getMinMaxProcessId() {
+		if (maxProcessId == -1) {
+			maxProcessId = contributions.stream().mapToLong(c -> c.item.id).max().getAsLong();
+			minProcessId = contributions.stream().mapToLong(c -> c.item.id).min().getAsLong();
+		}
+		return new Pair<Long, Long>(minProcessId, maxProcessId);
+	}
+
+	public Pair<Long, Long> getMinMaxCategory() {
+		if (maxCategory == -1) {
+			maxCategory = contributions.stream().mapToLong(c -> c.item.category).max().getAsLong();
+			minCategory = contributions.stream().mapToLong(c -> c.item.category).min().getAsLong();
+		}
+		return new Pair<Long, Long>(minCategory, maxCategory);
+	}
+
+	public Pair<Long, Long> getMinMaxLocation() {
+		if (maxLocation == -1) {
+			maxLocation = contributions.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).max()
+					.getAsLong();
+			minLocation = contributions.stream().mapToLong(c -> ((ProcessDescriptor) c.item).location).min()
+					.getAsLong();
+		}
+		return new Pair<Long, Long>(minLocation, maxLocation);
 	}
 
 	public void updateCellsColor() {
@@ -54,7 +76,7 @@ public class Product {
 	public String getImpactCategoryName() {
 		return impactCategoryName;
 	}
-	
+
 	public String getProductSystemName() {
 		return productSystemName;
 	}
