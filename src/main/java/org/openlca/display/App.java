@@ -27,6 +27,7 @@ public class App {
 		Config config = new Config(); // Contains global parameters
 		Display display = new Display();
 		Shell shell = new Shell(display, SWT.CLOSE | SWT.TITLE | SWT.RESIZE | SWT.MAX);
+		shell.setMaximized(true);
 		shell.setText("Product comparison GUI");
 		shell.setLayout(new GridLayout());
 		myData data = null;

@@ -567,7 +567,7 @@ public class ProductDisplay {
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText("Contribution result " + productIndex, textPos.x, textPos.y);
+		gc.drawText("Contribution result " + productIndex + 1, textPos.x, textPos.y);
 		textPos.y += 25;
 		if (TargetCalculationEnum.PRODUCT.equals(targetCalculation)) {
 			gc.drawText("Product System : " + p.getProductSystemName(), textPos.x, textPos.y);
@@ -591,7 +591,7 @@ public class ProductDisplay {
 
 	/**
 	 * Handle the cells, and display a rectangle for each of them (and merge the
-	 * cutoff one in on visual cell)
+	 * cutoff one in one visual cell)
 	 * 
 	 * @param gc           The GC component
 	 * @param rectEdge     The coordinate of the product rectangle
@@ -603,123 +603,200 @@ public class ProductDisplay {
 	 */
 	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxSumAmount) {
 		var cells = p.getList();
-		// Sum all the distincts values
-		double normalizedTotalAmountSum = cells.stream().mapToDouble(cell -> Math.abs(cell.getNormalizedAmount()))
-				.sum();
-		System.out.println("Product " + productIndex + " : " + normalizedTotalAmountSum + " amounts sum");
-		int minimumProductWidth = (int) (0.3 * productWidth);
-//		productWidth = (int) (productWidth * (normalizedTotalAmountSum / maxSumAmount));
-		if (productWidth < minimumProductWidth) {
-			// We set a minimum width, so the rectangle is not too small (in case
-			// of big differences )
-			productWidth = minimumProductWidth;
-		}
-		var wrapper = new Object() {
-			int width;
-		};
-		wrapper.width = productWidth;
 		long amountCutOff = cells.size() - nonCutoffAmount;
-		double totalAmountSumNonCutOff = cells.stream().skip(amountCutOff)
-				.mapToDouble(cell -> Math.abs(cell.getNormalizedAmount())).sum();
+		long cutOffProcessAmount = cells.stream().skip(amountCutOff).filter(c -> c.getAmount() == 0.0).count();
+		cutOffProcessAmount += amountCutOff;
+		int newProductWidth = handleCutOff(cells, productWidth, rectEdge, gc, cutOffProcessAmount);
+		return newProductWidth;
+	}
 
+	/**
+	 * Handle the non focused values : they are in the cutoff area if we don't want
+	 * them to be display (by choosing an amount of process to be display), or if
+	 * they are null contributions
+	 * 
+	 * @param cells                 The list of cells
+	 * @param remainingProductWidth The remaining width where we can draw
+	 * @param rectEdge              The corner of the product rectangle
+	 * @param gc                    The GC component
+	 * @param cutOffProcessAmount   The amount of process in the cutoff area
+	 * @return The total width of the product
+	 */
+	private int handleCutOff(List<Cell> cells, int remainingProductWidth, Point rectEdge, GC gc,
+			long cutOffProcessAmount) {
+		RGB rgbCutOff = new RGB(192, 192, 192); // Color for cutoff area
 		double cutoffRectangleSizeRatio = cutOffSize / 100.0;
-		double nonCutOffRecangleSizeRatio = 1 - cutoffRectangleSizeRatio;
-		long amountNonCutOffBigEnoughContribution = cells.stream().skip(amountCutOff)
-				.filter(cell -> Math.abs(cell.getNormalizedAmount()) * totalAmountSumNonCutOff
-						* nonCutOffRecangleSizeRatio * wrapper.width > 1)
-				.count();
-		// Minimum space between each cells
-		double gap = (productWidth * cutoffRectangleSizeRatio / amountCutOff);
-		int chunk = -1, chunkSize = 0;
-		boolean gapEnoughBig = true;
-		var newProductWidth = 0.0;
-		if (gap < 1.0) {
+		int productCutOffWidth = 0;
+		if (cutOffProcessAmount == cells.size()) {
+			productCutOffWidth = remainingProductWidth;
+		} else {
+			productCutOffWidth = (int) (remainingProductWidth * cutoffRectangleSizeRatio);
+		}
+		Point start = new Point(rectEdge.x + 1, rectEdge.y + 1);
+		double normalizedCutOffAmountSum = cells.stream().limit(cutOffProcessAmount)
+				.mapToDouble(cell -> Math.abs(cell.getNormalizedAmount())).sum();
+		double minimumGapBetweenCells = ((double) productCutOffWidth / cutOffProcessAmount);
+		int chunk = -1, chunkSize = 0, newChunk = 0;
+		boolean gapBigEnough = true;
+		if (minimumGapBetweenCells < 1.0) {
 			// If the gap is to small, we put a certain amount of results in the same
 			// chunk
-			chunkSize = (int) Math.ceil(1 / gap);
-			gapEnoughBig = false;
+			chunkSize = (int) Math.ceil(1 / minimumGapBetweenCells);
+			gapBigEnough = false;
 		}
-		int minCellWidth = 3;
-		Point start = null;
-		var newChunk = 0;
-		boolean isCutOff = true;
-		RGB rgbCutOff = new RGB(192, 192, 192);
-		int cutOffSize = 0;
-		int nonCutoffSize = 0;
-		int nonCutoffBigEnoughSize = 0;
-		for (var cellIndex = 0; cellIndex < cells.size(); cellIndex++) {
-			if (start == null) {
-				start = new Point(rectEdge.x + 1, rectEdge.y + 1);
-			}
-			if (cellIndex >= amountCutOff) {
-				if (isCutOff) {
-					isCutOff = false;
-					gc.setBackground(new Color(gc.getDevice(), rgbCutOff));
-					gc.fillRectangle(rectEdge.x + 1, rectEdge.y + 1, (int) newProductWidth, productHeight - 1);
-					cutOffSize = (int) newProductWidth;
-					nonCutoffSize = productWidth - cutOffSize;
-					nonCutoffBigEnoughSize = (int) (nonCutoffSize
-							- (nonCutoffAmount - amountNonCutOffBigEnoughContribution) * minCellWidth);
-					gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
-					chunk = -1;
-					chunkSize = 0;
-					gapEnoughBig = true;
-					gap = ((double) nonCutoffSize / (cells.size() - amountCutOff));
-					if (gap < 1.0 || nonCutoffBigEnoughSize < 0) {
-						chunkSize = (int) Math.ceil(1 / gap);
-						gapEnoughBig = false;
-					}
-				}
-			}
-			if (!gapEnoughBig) {
+		Point end = null;
+		var newProductWidth = 0;
+		for (var cellIndex = 0; cellIndex < cutOffProcessAmount; cellIndex++) {
+			if (!gapBigEnough) {
 				newChunk = computeChunk(chunk, chunkSize, cellIndex);
 			}
 			var cell = cells.get(cellIndex);
 			int cellWidth = 0;
-			if (!gapEnoughBig && chunk != newChunk) {
+			if (!gapBigEnough && chunk != newChunk) {
 				// We are on a new chunk, so we draw a cell with a width of 1 pixel
-				cellWidth = (int) gap;
-				if (cellWidth == 0) {
-					cellWidth = 1;
-				}
-			} else if (!gapEnoughBig && chunk == newChunk) {
+				cellWidth = 1;
+			} else if (!gapBigEnough && chunk == newChunk) {
 				// We stay on the same chunk, so we don't draw the cell
 				cellWidth = 0;
 			} else {
 				var value = cell.getNormalizedAmount();
-				if (cellIndex >= amountCutOff) {
-					if (cellIndex == cells.size() - 1) {
-						cellWidth = (int) (productWidth - newProductWidth);
-					} else {
-						var percentage = value / totalAmountSumNonCutOff;
-						cellWidth = (int) (productWidth * nonCutOffRecangleSizeRatio * percentage);
-						if (cellWidth < minCellWidth) {
-							cellWidth = minCellWidth;
-						} else {
-							cellWidth = (int) (nonCutoffBigEnoughSize * percentage);
-						}
-					}
-				} else {
-					var percentage = value / normalizedTotalAmountSum;
-					cellWidth = (int) (productWidth * percentage);
-				}
-
+				var percentage = value / normalizedCutOffAmountSum;
+				cellWidth = (int) (productCutOffWidth * percentage);
 			}
 			newProductWidth += cellWidth;
-			if (cellIndex >= amountCutOff) {
-				gc.setBackground(new Color(gc.getDevice(), cell.getRgb()));
-				gc.fillRectangle(start.x, start.y, cellWidth, productHeight - 1);
-				gc.setBackground(gc.getDevice().getSystemColor(SWT.COLOR_WHITE));
+			end = computeEndCell(start, cell, (int) cellWidth, true);
+			if (gapBigEnough || !gapBigEnough && chunk != newChunk) {
+				// We end the current chunk / cell
+				start = end;
+				chunk = newChunk;
 			}
-			var end = computeEndCell(start, cell, (int) cellWidth, isCutOff);
+		}
+		if (cutOffProcessAmount == cells.size()) {
+			newProductWidth = productCutOffWidth;
+		}
+		fillRectangle(gc, new Point(rectEdge.x + 1, rectEdge.y + 1), newProductWidth, productHeight - 1, rgbCutOff,
+				SWT.COLOR_WHITE);
+		return handleNotBigEnoughProcess(cells, (int) (remainingProductWidth - newProductWidth), rectEdge, gc,
+				cutOffProcessAmount, (end != null) ? end : start, (int) newProductWidth);
+	}
+
+	/**
+	 * Handle non cutoff area, but too small values, so we display them with a
+	 * minimum width
+	 * 
+	 * @param cells                 The list of cells
+	 * @param remainingProductWidth The remaining product width where we can draw
+	 * @param rectEdge              The corner of the product rectangle
+	 * @param gc                    The GC component
+	 * @param cutOffProcessAmount   The amount of cutoff Process
+	 * @param start                 The starting point
+	 * @param currentProductWidth   The current product width
+	 * @return The new product total width
+	 */
+	private int handleNotBigEnoughProcess(List<Cell> cells, int remainingProductWidth, Point rectEdge, GC gc,
+			long cutOffProcessAmount, Point start, int currentProductWidth) {
+		int minCellWidth = 3;
+		double nonCutOffSum = cells.stream().skip(cutOffProcessAmount).mapToDouble(c -> c.getNormalizedAmount()).sum();
+		long notBigEnoughContributionAmount = cells.stream().skip(cutOffProcessAmount).filter(
+				cell -> Math.abs(cell.getNormalizedAmount()) / nonCutOffSum * remainingProductWidth <= minCellWidth)
+				.count();
+		if (notBigEnoughContributionAmount == 0) {
+			// If there is no too small values, we skip this part
+			return handleBigEnoughProcess(cells, (int) (remainingProductWidth), rectEdge, gc,
+					cutOffProcessAmount + notBigEnoughContributionAmount, start, currentProductWidth);
+		}
+		int chunk = -1, chunkSize = 0, newChunk = 0;
+		boolean gapEnoughBig = true;
+		Point end = null;
+		double length = minCellWidth * notBigEnoughContributionAmount;
+		if (length > remainingProductWidth) {
+			// if the length is to big, we put a certain amount of results in the same
+			// chunk
+			chunkSize = (int) Math.ceil(((double) length) / remainingProductWidth);
+			gapEnoughBig = false;
+		}
+		var newProductWidth = 0;
+		for (var cellIndex = cutOffProcessAmount; cellIndex < cutOffProcessAmount
+				+ notBigEnoughContributionAmount; cellIndex++) {
+			if (!gapEnoughBig) {
+				newChunk = computeChunk(chunk, chunkSize, (int) cellIndex);
+			}
+			var cell = cells.get((int) cellIndex);
+			int cellWidth = 0;
+			if (!gapEnoughBig && chunk != newChunk || gapEnoughBig) {
+				// We are on a new chunk, so we draw a cell with a minimum width
+				cellWidth = minCellWidth;
+				fillRectangle(gc, start, cellWidth, productHeight - 1, cell.getRgb(), SWT.COLOR_WHITE);
+			} else if (!gapEnoughBig && chunk == newChunk) {
+				// We stay on the same chunk, so we don't draw the cell
+				cellWidth = 0;
+			}
+			newProductWidth += cellWidth;
+			end = computeEndCell(start, cell, (int) cellWidth, false);
 			if (gapEnoughBig || !gapEnoughBig && chunk != newChunk) {
 				// We end the current chunk / cell
 				start = end;
 				chunk = newChunk;
 			}
-
 		}
-		return (int) newProductWidth;
+		return handleBigEnoughProcess(cells, (int) (remainingProductWidth - newProductWidth), rectEdge, gc,
+				cutOffProcessAmount + notBigEnoughContributionAmount, (end != null) ? end : start,
+				(int) (currentProductWidth + newProductWidth));
+	}
+
+	/**
+	 * Handle the bigger values, by drawing cells with proportional width to the
+	 * value
+	 * 
+	 * @param cells                 The cells list
+	 * @param remainingProductWidth The remaining product width where we can draw
+	 * @param rectEdge              The corner of the product rectangle
+	 * @param gc                    The GC component
+	 * @param currentCellIndex      The current cell index
+	 * @param start                 The starting point
+	 * @param currentProductWidth   The current product width
+	 * @return The new product width
+	 */
+	private int handleBigEnoughProcess(List<Cell> cells, int remainingProductWidth, Point rectEdge, GC gc,
+			long currentCellIndex, Point start, int currentProductWidth) {
+		if (currentCellIndex == cells.size()) {
+			return (int) currentProductWidth + remainingProductWidth;
+		}
+		double amountSum = cells.stream().skip(currentCellIndex).mapToDouble(c -> c.getNormalizedAmount()).sum();
+		double minimumGapBetweenCells = (remainingProductWidth / (cells.size() - currentCellIndex));
+		int chunk = -1, chunkSize = 0, newChunk = 0;
+		boolean gapBigEnough = true;
+		if (minimumGapBetweenCells < 1.0) {
+			// If the gap is to small, we put a certain amount of results in the same
+			// chunk
+			chunkSize = (int) Math.ceil(1 / minimumGapBetweenCells);
+			gapBigEnough = false;
+		}
+		var newProductWidth = 0;
+		for (var cellIndex = currentCellIndex; cellIndex < cells.size(); cellIndex++) {
+			if (!gapBigEnough) {
+				newChunk = computeChunk(chunk, chunkSize, (int) cellIndex);
+			}
+			var cell = cells.get((int) cellIndex);
+			int cellWidth = 0;
+
+			if (cellIndex != cells.size() - 1) {
+				var percentage = cell.getNormalizedAmount() / amountSum;
+				cellWidth = (int) (remainingProductWidth * percentage);
+			} else {
+				// For the last cell, we fill it with the remaining empty width
+				cellWidth = (int) (remainingProductWidth - newProductWidth);
+			}
+			newProductWidth += cellWidth;
+			fillRectangle(gc, start, cellWidth, productHeight - 1, cell.getRgb(), SWT.COLOR_WHITE);
+			var end = computeEndCell(start, cell, (int) cellWidth, false);
+			if (gapBigEnough || !gapBigEnough && chunk != newChunk) {
+				// We end the current chunk / cell
+				start = end;
+				chunk = newChunk;
+			}
+		}
+		return (int) currentProductWidth + remainingProductWidth;
 	}
 
 	/**
@@ -776,6 +853,30 @@ public class ProductDisplay {
 		gc.drawLine(start.x, start.y, end.x, end.y);
 		if (afterColor != null) {
 			gc.setForeground(gc.getDevice().getSystemColor(afterColor));
+		}
+	}
+
+	/**
+	 * Draw a filled rectangle, with an optional color
+	 * 
+	 * @param gc          The GC
+	 * @param start       The starting point
+	 * @param width       The width
+	 * @param height      The height
+	 * @param beforeColor The color of the rectangle
+	 * @param afterColor  The color to get back after the draw
+	 */
+	private void fillRectangle(GC gc, Point start, int width, int heigth, Object beforeColor, Integer afterColor) {
+		if (beforeColor != null) {
+			if (beforeColor instanceof Integer) {
+				gc.setBackground(gc.getDevice().getSystemColor((int) beforeColor));
+			} else {
+				gc.setBackground(new Color(gc.getDevice(), (RGB) beforeColor));
+			}
+		}
+		gc.fillRectangle(start.x, start.y, width, heigth);
+		if (afterColor != null) {
+			gc.setBackground(gc.getDevice().getSystemColor(afterColor));
 		}
 	}
 
