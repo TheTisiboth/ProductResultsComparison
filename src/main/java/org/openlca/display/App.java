@@ -47,7 +47,7 @@ public class App {
 
 	private static myData getContributionResults(String dbName, Config config) {
 		println("Connect to databases ");
-		Product.criteria = config.colorCellCriteria;
+		Contributions.criteria = config.colorCellCriteria;
 
 		var db = Derby.fromDataDir(dbName);
 		var productSystem = db.get(ProductSystem.class, "7c16aba1-a7d2-4559-b336-a2208a52a25d");

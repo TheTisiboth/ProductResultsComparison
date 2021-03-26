@@ -23,7 +23,7 @@ public class Cell {
 	private double minAmount;
 	static ColorCellCriteria criteria;
 	private boolean isCutoff;
-	private Product product;
+	private Contributions product;
 
 	public void setData(Point startingLinksPoint, Point endingLinkPoint, int startX, int endx, boolean isCutoff) {
 		this.startingLinksPoint = startingLinksPoint;
@@ -49,7 +49,7 @@ public class Cell {
 		this.endingLinkPoint = endingLinkPoint;
 	}
 
-	public Cell(List<Contribution<CategorizedDescriptor>> contributions, double minAmount, Product p) {
+	public Cell(List<Contribution<CategorizedDescriptor>> contributions, double minAmount, Contributions p) {
 		this.minAmount = minAmount;
 		product = p;
 		result = contributions.stream().map(c -> new Result(c)).collect(Collectors.toList());

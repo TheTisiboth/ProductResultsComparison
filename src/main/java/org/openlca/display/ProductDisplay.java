@@ -52,7 +52,7 @@ import org.openlca.core.results.ContributionResult;
 
 public class ProductDisplay {
 	private Shell shell;
-	private List<Product> products;
+	private List<Contributions> contributionsList;
 	private Point screenSize;
 	private Config config;
 	private Point origin;
@@ -63,7 +63,7 @@ public class ProductDisplay {
 	private ColorCellCriteria colorCellCriteria;
 	private Map<Integer, Image> cacheMap;
 	private Combo selectCategory;
-	private Color chosenColor;
+	private Color chosenCategoryColor;
 	private ContributionResult contributionResult;
 	private int nonCutoffAmount;
 	private int cutOffSize;
@@ -72,36 +72,36 @@ public class ProductDisplay {
 	private ImpactMethodDescriptor impactMethod;
 	private String dbName;
 	private Map<String, ImpactDescriptor> impactCategoryMap;
-	private List<String> impactCategories;
+	private List<String> impactCategoriesName;
 	private TargetCalculationEnum targetCalculation;
 	private Composite composite;
-	private boolean isCalculationRun;
-	private long chosenCategoryId;
+	private boolean isCalculationStarted;
+	private long chosenProcessCategoryId;
 	private Map<Integer, Map<Integer, List<Contribution<CategorizedDescriptor>>>> contributionResultMap;
 
 	public ProductDisplay(Shell shell, Config config, myData data, String dbName) {
 		this.dbName = dbName;
-		this.db = data.db;
-		this.shell = shell;
-		this.config = config;
-		contributionResultMap = new HashMap<>();
-		chosenCategoryId = -1;
-		isCalculationRun = false;
+		db = data.db;
 		productSystem = data.productSystem;
 		impactMethod = data.impactMethod;
-		products = new ArrayList<>();
 		contributionResult = data.contributionResult;
-		origin = new Point(0, 0);
+		this.shell = shell;
+		this.config = config;
+		colorCellCriteria = config.colorCellCriteria;
+		targetCalculation = config.targetCalculationCriteria;
+		contributionsList = new ArrayList<>();
+		cacheMap = new HashMap<>();
+		contributionResultMap = new HashMap<>();
+		impactCategoriesName = new ArrayList<>();
+		chosenProcessCategoryId = -1;
 		xMargin = 200;
 		productHeight = 30;
 		gapBetweenProduct = 300;
 		theoreticalScreenHeight = xMargin * 2 + gapBetweenProduct * 2;
-		colorCellCriteria = config.colorCellCriteria;
-		cacheMap = new HashMap<>();
 		nonCutoffAmount = 100;
 		cutOffSize = 25;
-		impactCategories = new ArrayList<>();
-		targetCalculation = TargetCalculationEnum.IMPACT;
+		origin = new Point(0, 0);
+		isCalculationStarted = false;
 	}
 
 	/**
@@ -110,8 +110,8 @@ public class ProductDisplay {
 	 */
 	void display() {
 		System.out.println("Display start");
-		Product.config = config;
-		Product.updateComparisonCriteria(colorCellCriteria);
+		Contributions.config = config;
+		Contributions.updateComparisonCriteria(colorCellCriteria);
 		Cell.config = config;
 
 		/**
@@ -190,24 +190,24 @@ public class ProductDisplay {
 		var b = new Button(row1, SWT.NONE);
 		composite = new Composite(row1, SWT.BORDER);
 		var impactCategoryTable = impactCategoryTable(composite);
-		impactCategoryMap = contributionResult.getImpacts().stream().map(impactCategory -> {
-			TableItem item = new TableItem(impactCategoryTable, SWT.BORDER);
-			item.setText(impactCategory.id + ": " + impactCategory.name);
-			item.setChecked(true);
-			impactCategories.add(item.getText());
-			return impactCategory;
-		}).collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
-				impactCategory -> impactCategory));
-
+		impactCategoryMap = contributionResult.getImpacts().stream().sorted((c1, c2) -> c1.name.compareTo(c2.name))
+				.map(impactCategory -> {
+					TableItem item = new TableItem(impactCategoryTable, SWT.BORDER);
+					item.setText(impactCategory.id + ": " + impactCategory.name);
+					item.setChecked(true);
+					impactCategoriesName.add(item.getText());
+					return impactCategory;
+				}).collect(Collectors.toMap(impactCategory -> impactCategory.id + ": " + impactCategory.name,
+						impactCategory -> impactCategory));
 		b.setText("Toggle");
 		b.addListener(SWT.Selection, new Listener() {
 			public void handleEvent(Event e) {
 				Arrays.stream(impactCategoryTable.getItems()).forEach(item -> {
 					item.setChecked(!item.getChecked());
 					if (item.getChecked()) {
-						impactCategories.add(item.getText());
+						impactCategoriesName.add(item.getText());
 					} else {
-						impactCategories.remove(item.getText());
+						impactCategoriesName.remove(item.getText());
 					}
 				});
 			}
@@ -235,18 +235,20 @@ public class ProductDisplay {
 		impactCategoryTable.addListener(SWT.Selection, new Listener() {
 			public void handleEvent(Event event) {
 				if (event.detail == SWT.CHECK) {
+					// We keep tracking of check/select event, to have in impactCategoriesName the
+					// checked impact categories
 					if (((TableItem) event.item).getChecked()) {
-						impactCategories.add(((TableItem) event.item).getText());
+						impactCategoriesName.add(((TableItem) event.item).getText());
 					} else {
-						impactCategories.remove(((TableItem) event.item).getText());
+						impactCategoriesName.remove(((TableItem) event.item).getText());
 					}
-				} else {
+				} else { // Select event
 					var checked = ((TableItem) event.item).getChecked();
 					((TableItem) event.item).setChecked(!checked);
 					if (!checked) {
-						impactCategories.add(((TableItem) event.item).getText());
+						impactCategoriesName.add(((TableItem) event.item).getText());
 					} else {
-						impactCategories.remove(((TableItem) event.item).getText());
+						impactCategoriesName.remove(((TableItem) event.item).getText());
 					}
 				}
 			}
@@ -275,8 +277,8 @@ public class ProductDisplay {
 				ColorCellCriteria criteria = ColorCellCriteria.getCriteria(choice);
 				if (!colorCellCriteria.equals(criteria)) {
 					colorCellCriteria = criteria;
-					Product.updateComparisonCriteria(criteria);
-					products.stream().forEach(p -> p.updateCellsColor());
+					Contributions.updateComparisonCriteria(criteria);
+					contributionsList.stream().forEach(p -> p.updateCellsColor());
 					triggerComboSelection(selectCategory, true);
 					redraw(row2, canvas);
 				}
@@ -300,29 +302,32 @@ public class ProductDisplay {
 		selectCategory.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				if (selectCategory.getSelectionIndex() == -1) { // Nothing is selected : initialisation
-					chosenCategoryId = -1;
+					chosenProcessCategoryId = -1;
 					resetDefaultColorCells();
-					var<String> list = products.stream().flatMap(p -> p.getList().stream().flatMap(results -> results
-							.getResult().stream().filter(r -> r.getContribution().item != null).map(r -> {
-								var categoryId = r.getContribution().item.category;
-								var cat = db.getDescriptor(Category.class, categoryId);
-								if (categoryMap.get(cat.name) == null) {
-									categoryMap.put(cat.name, cat);
-								}
-								return cat.name;
-							}))).distinct().sorted().collect(Collectors.toList());
+					var<String> list = contributionsList.stream()
+							.flatMap(p -> p.getList().stream().flatMap(results -> results.getResult().stream()
+									.filter(r -> r.getContribution().item != null).map(r -> {
+										var categoryId = r.getContribution().item.category;
+										var cat = db.getDescriptor(Category.class, categoryId);
+										if (categoryMap.get(cat.name) == null) {
+											categoryMap.put(cat.name, cat);
+										}
+										return cat.name;
+									})))
+							.distinct().sorted().collect(Collectors.toList());
 					list.add(0, "");
 					selectCategory.setItems(list.toArray(String[]::new));
 				} else if (selectCategory.getSelectionIndex() == 0) { // Empty value is selected : reset
-					chosenCategoryId = 0;
+					chosenProcessCategoryId = 0;
 					resetDefaultColorCells();
 					redraw(row2, canvas);
 				} else { // A category is selected : update color
 					resetDefaultColorCells();
-					chosenCategoryId = categoryMap.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
-					products.stream().forEach(p -> p.getList().stream().forEach(c -> {
-						if (c.getResult().get(0).getContribution().item.category == chosenCategoryId) {
-							c.setRgb(chosenColor.getRGB());
+					chosenProcessCategoryId = categoryMap
+							.get(selectCategory.getItem(selectCategory.getSelectionIndex())).id;
+					contributionsList.stream().forEach(p -> p.getList().stream().forEach(c -> {
+						if (c.getResult().get(0).getContribution().item.category == chosenProcessCategoryId) {
+							c.setRgb(chosenCategoryColor.getRGB());
 						}
 					}));
 					redraw(row2, canvas);
@@ -351,9 +356,9 @@ public class ProductDisplay {
 	 * Reset the default color of the cells
 	 */
 	public void resetDefaultColorCells() {
-		RGB rgb = chosenColor.getRGB();
+		RGB rgb = chosenCategoryColor.getRGB();
 		// Reset categories colors to default (just for the one which where changed)
-		products.stream().forEach(p -> p.getList().stream().filter(cell -> cell.getRgb().equals(rgb))
+		contributionsList.stream().forEach(p -> p.getList().stream().filter(cell -> cell.getRgb().equals(rgb))
 				.forEach(cell -> cell.resetDefaultRGB()));
 	}
 
@@ -363,12 +368,12 @@ public class ProductDisplay {
 	 * @param composite The parent component
 	 */
 	private void colorPickerMenu(Composite composite) {
-		// Default color
-		chosenColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
+		// Default color (pink)
+		chosenCategoryColor = new Color(shell.getDisplay(), new RGB(255, 0, 255));
 		// Use a label full of spaces to show the color
 		final Label colorLabel = new Label(composite, SWT.NONE);
 		colorLabel.setText("    ");
-		colorLabel.setBackground(chosenColor);
+		colorLabel.setBackground(chosenCategoryColor);
 		Button button = new Button(composite, SWT.PUSH);
 		button.setText("Color...");
 		button.addSelectionListener(new SelectionAdapter() {
@@ -385,9 +390,9 @@ public class ProductDisplay {
 				if (rgb != null) {
 					// Dispose the old color, create the
 					// new one, and set into the label
-					chosenColor.dispose();
-					chosenColor = new Color(composite.getDisplay(), rgb);
-					colorLabel.setBackground(chosenColor);
+					chosenCategoryColor.dispose();
+					chosenCategoryColor = new Color(composite.getDisplay(), rgb);
+					colorLabel.setBackground(chosenCategoryColor);
 					triggerComboSelection(selectCategory, false);
 				}
 			}
@@ -459,32 +464,33 @@ public class ProductDisplay {
 		runCalculation.setText("Run calculation");
 		runCalculation.addListener(SWT.Selection, new Listener() {
 			public void handleEvent(Event e) {
-				products = new ArrayList<>();
+				contributionsList = new ArrayList<>();
 				if (TargetCalculationEnum.IMPACT.equals(targetCalculation)) {
 					var productSystemResults = contributionResultMap.get(productSystem.hashCode());
 					if (productSystemResults == null) {
 						productSystemResults = new HashMap<>();
 						contributionResultMap.put(productSystem.hashCode(), productSystemResults);
 					}
-					impactCategories.stream().forEach(item -> {
+					impactCategoriesName.stream().forEach(item -> {
 						var psResults = contributionResultMap.get(productSystem.hashCode());
 						var impactDescriptor = impactCategoryMap.get(item);
 						var contributionList = psResults.get(impactDescriptor.hashCode());
 						if (contributionList == null) {
 							contributionList = contributionResult.getProcessContributions(impactDescriptor);
-							psResults.put(impactDescriptor.hashCode(), contributionList);
+							psResults.put(impactDescriptor.hashCode(), contributionList); // We cache the process
+																							// contributions
 						}
-						var p = new Product(contributionList, item, null);
-						products.add(p);
+						var p = new Contributions(contributionList, item, null);
+						contributionsList.add(p);
 					});
 				} else {
 					new ProductSystemDao(db).getAll().stream().forEach(ps -> {
-						var psResults = contributionResultMap.get(productSystem.hashCode());
+						var psResults = contributionResultMap.get(ps.hashCode());
 						if (psResults == null) {
 							psResults = new HashMap<>();
-							contributionResultMap.put(productSystem.hashCode(), psResults);
+							contributionResultMap.put(ps.hashCode(), psResults);
 						}
-						var impactDescriptor = impactCategoryMap.get(impactCategories.get(0));
+						var impactDescriptor = impactCategoryMap.get(impactCategoriesName.get(0));
 						var contributionList = psResults.get(impactDescriptor.hashCode());
 						if (contributionList == null) {
 							var setup = new CalculationSetup(ps);
@@ -492,15 +498,16 @@ public class ProductDisplay {
 							var calc = new SystemCalculator(db);
 							var fullResult = calc.calculateFull(setup);
 							contributionList = fullResult.getProcessContributions(impactDescriptor);
-							psResults.put(impactDescriptor.hashCode(), contributionList);
+							psResults.put(impactDescriptor.hashCode(), contributionList); // We cache the process
+																							// contribution
 						}
-						var p = new Product(contributionList, impactDescriptor.id + ": " + impactDescriptor.name,
+						var p = new Contributions(contributionList, impactDescriptor.id + ": " + impactDescriptor.name,
 								ps.id + ": " + ps.name);
-						products.add(p);
+						contributionsList.add(p);
 					});
 				}
-				isCalculationRun = true;
-				theoreticalScreenHeight = xMargin * 2 + gapBetweenProduct * (products.size() - 1);
+				isCalculationStarted = true;
+				theoreticalScreenHeight = xMargin * 2 + gapBetweenProduct * (contributionsList.size() - 1);
 				vBar.setMaximum(theoreticalScreenHeight);
 				sortProducts();
 				triggerComboSelection(selectCategory, true);
@@ -513,36 +520,30 @@ public class ProductDisplay {
 	 * Sort products by ascending amount, according to the comparison criteria
 	 */
 	private void sortProducts() {
-		Product.updateComparisonCriteria(colorCellCriteria);
-		products.stream().forEach(p -> p.sort());
+		Contributions.updateComparisonCriteria(colorCellCriteria);
+		contributionsList.stream().forEach(p -> p.sort());
 	}
 
 	/**
 	 * Redraw everything
 	 * 
-	 * @param recompute Tell if we have to recompute the categories. If false, then
-	 *                  we just redraw the whole objects
+	 * @param composite The parent component
 	 * @param canvas    The canvas
 	 */
 	private void redraw(Composite composite, Canvas canvas) {
 		var vBar = canvas.getVerticalBar();
 		screenSize = shell.getSize();
+
+		var hash = computeConfigurationHash();
 		// Cached image, in which we draw the things, and then display it once it is
 		// finished
-		Image cache = null;
-
-		// Otherwise, we take a cached Image
-		var hash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
-				nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
-		cache = cacheMap.get(hash);
-		if (cache == null) {
+		Image cache = cacheMap.get(hash);
+		if (cache == null) { // Otherwise, we create it, and cache it
 			cache = new Image(Display.getCurrent(), screenSize.x, theoreticalScreenHeight);
-			cachedPaint(composite, cache); // Costly painting, so we cache it; Called one time at the beginning
-			var newHash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
-					nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
+			cachedPaint(composite, cache); // Costly painting, so we cache it
+			var newHash = computeConfigurationHash();
 			cacheMap.put(newHash, cache);
 		}
-
 		Rectangle client = canvas.getClientArea();
 		vBar.setThumb(Math.min(theoreticalScreenHeight, client.height));
 		vBar.setPageIncrement(Math.min(theoreticalScreenHeight, client.height));
@@ -551,9 +552,21 @@ public class ProductDisplay {
 	}
 
 	/**
-	 * Costly painting method. For each product, it draws links between each
-	 * matching results. Since it is costly, it is firstly drawed in an image. Once
-	 * it is finished, we paint the image
+	 * Compute a hash from the different configuration element : the target, the
+	 * impact categories name, etc
+	 * 
+	 * @return A hash
+	 */
+	private int computeConfigurationHash() {
+		var hash = Objects.hash(targetCalculation, impactCategoriesName, chosenCategoryColor, colorCellCriteria,
+				cutOffSize, nonCutoffAmount, shell.getSize(), isCalculationStarted, chosenProcessCategoryId);
+		return hash;
+	}
+
+	/**
+	 * Costly painting method. For each process contributions, it draws links
+	 * between each matching results. Since it is costly, it is firstly drawed on an
+	 * image. Once it is finished, we paint the image
 	 * 
 	 * @param composite The parent component
 	 * @param cache     The cached image in which we are drawing
@@ -562,7 +575,7 @@ public class ProductDisplay {
 		GC gc = new GC(cache);
 		screenSize = composite.getSize(); // Responsive behavior
 		double maxProductWidth = screenSize.x * 0.85; // 85% of the screen width
-		// Start point of the first product rectangle
+		// Starting point of the first product rectangle
 		Point rectEdge = new Point(0 + xMargin, 0 + xMargin);
 		Point textPos = new Point(5, 5);
 		gc.drawText("Database : " + dbName, textPos.x, textPos.y);
@@ -572,13 +585,13 @@ public class ProductDisplay {
 			textPos.y += 30;
 		}
 		gc.drawText("Impact assessment method : " + impactMethod.name, textPos.x, textPos.y);
-		var optional = products.stream()
+		var optional = contributionsList.stream()
 				.mapToDouble(p -> p.getList().stream().mapToDouble(c -> c.getNormalizedAmount()).sum()).max();
 		double maxSumAmount = 0.0;
 		if (optional.isPresent()) {
 			maxSumAmount = optional.getAsDouble();
 		}
-		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
+		for (int productIndex = 0; productIndex < contributionsList.size(); productIndex++) {
 			handleProduct(gc, maxProductWidth, rectEdge, productIndex, maxSumAmount);
 			rectEdge = new Point(rectEdge.x, rectEdge.y + 300);
 		}
@@ -596,11 +609,11 @@ public class ProductDisplay {
 	 * @param maxSumAmount    The max amounts sum of the products
 	 */
 	private void handleProduct(GC gc, double maxProductWidth, Point rectEdge, int productIndex, double maxSumAmount) {
-		var p = products.get(productIndex);
+		var p = contributionsList.get(productIndex);
 		int productWidth = (int) maxProductWidth;
 		// Draw the product name
 		Point textPos = new Point(rectEdge.x - xMargin, rectEdge.y + 8);
-		gc.drawText("Contribution result " + productIndex + 1, textPos.x, textPos.y);
+		gc.drawText("Contribution result " + (productIndex + 1), textPos.x, textPos.y);
 		textPos.y += 25;
 		if (TargetCalculationEnum.PRODUCT.equals(targetCalculation)) {
 			gc.drawText("Product System : " + p.getProductSystemName(), textPos.x, textPos.y);
@@ -609,7 +622,9 @@ public class ProductDisplay {
 		gc.drawText("Impact : " + p.getImpactCategoryName(), textPos.x, textPos.y);
 		productWidth = handleCells(gc, rectEdge, productIndex, p, productWidth, maxSumAmount);
 
-		if (productIndex == 0) { // Draw an arrow to show the way the results are ordered
+		// Draw an arrow above the first product contributions to show the way the
+		// results are ordered
+		if (productIndex == 0) {
 			Point startPoint = new Point(rectEdge.x, rectEdge.y - 50);
 			Point endPoint = new Point((int) (startPoint.x + maxProductWidth), startPoint.y);
 			drawLine(gc, startPoint, endPoint, null, null);
@@ -634,7 +649,8 @@ public class ProductDisplay {
 	 * @param maxAmount    The max amounts sum of the products
 	 * @return The new product width
 	 */
-	private int handleCells(GC gc, Point rectEdge, int productIndex, Product p, int productWidth, double maxSumAmount) {
+	private int handleCells(GC gc, Point rectEdge, int productIndex, Contributions p, int productWidth,
+			double maxSumAmount) {
 		var cells = p.getList();
 		long amountCutOff = cells.size() - nonCutoffAmount;
 		long cutOffProcessAmount = cells.stream().skip(amountCutOff).filter(c -> c.getAmount() == 0.0).count();
@@ -738,8 +754,8 @@ public class ProductDisplay {
 				.count();
 		if (notBigEnoughContributionAmount == 0) {
 			// If there is no too small values, we skip this part
-			return handleBigEnoughProcess(cells, (int) (remainingProductWidth), rectEdge, gc,
-					cutOffProcessAmount + notBigEnoughContributionAmount, start, currentProductWidth);
+			return handleBigEnoughProcess(cells, (int) (remainingProductWidth), rectEdge, gc, cutOffProcessAmount,
+					start, currentProductWidth);
 		}
 		int chunk = -1, chunkSize = 0, newChunk = 0;
 		boolean gapEnoughBig = true;
@@ -922,11 +938,11 @@ public class ProductDisplay {
 	 * @param gc The GC component
 	 */
 	private void drawLinks(GC gc) {
-		for (int productIndex = 0; productIndex < products.size() - 1; productIndex++) {
-			var cells = products.get(productIndex);
+		for (int productIndex = 0; productIndex < contributionsList.size() - 1; productIndex++) {
+			var cells = contributionsList.get(productIndex);
 			for (Cell cell : cells.getList()) {
 				if (cell.isLinkDrawable()) {
-					var nextCells = products.get(productIndex + 1);
+					var nextCells = contributionsList.get(productIndex + 1);
 					// We search for a cell that has the same process
 					var optional = nextCells.getList().stream()
 							.filter(next -> next.getResult().get(0).getContribution().item
@@ -1021,8 +1037,7 @@ public class ProductDisplay {
 	private void addPaintListener(Canvas canvas) {
 		canvas.addPaintListener(new PaintListener() {
 			public void paintControl(PaintEvent e) {
-				var hash = Objects.hash(targetCalculation, impactCategories, chosenColor, colorCellCriteria, cutOffSize,
-						nonCutoffAmount, shell.getSize(), isCalculationRun, chosenCategoryId);
+				var hash = computeConfigurationHash();
 				var cache = cacheMap.get(hash);
 				e.gc.drawImage(cache, origin.x, origin.y);
 			}

@@ -8,4 +8,5 @@ public class Config {
 	public final boolean useGradientColor = true;
 	public final boolean useBezierCurve = false;
 	public final ColorCellCriteria colorCellCriteria = ColorCellCriteria.NONE;
+	public final TargetCalculationEnum targetCalculationCriteria = TargetCalculationEnum.IMPACT;
 }

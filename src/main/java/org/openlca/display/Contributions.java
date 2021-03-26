@@ -9,7 +9,7 @@ import org.openlca.core.model.descriptors.ProcessDescriptor;
 import org.openlca.core.results.Contribution;
 import org.openlca.util.Pair;
 
-public class Product {
+public class Contributions {
 
 	private ArrayList<Cell> list;
 	private String impactCategoryName;
@@ -22,7 +22,7 @@ public class Product {
 	long minLocation = -1, maxLocation = -1;
 	private List<Contribution<CategorizedDescriptor>> contributions;
 
-	public Product(List<Contribution<CategorizedDescriptor>> l, String n, String productSystemName) {
+	public Contributions(List<Contribution<CategorizedDescriptor>> l, String n, String productSystemName) {
 		contributions = l;
 		impactCategoryName = n;
 		this.productSystemName = productSystemName;
